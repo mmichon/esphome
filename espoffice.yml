@@ -1,0 +1,31 @@
+substitutions:
+  location: Office
+  esp_hostname: espbedroom
+
+esphome:
+  name: ${esp_hostname}
+  platform: ESP8266
+  board: d1_mini # pinout https://m.media-amazon.com/images/I/71d6+P4PUzL._SL1067_.jpg
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+logger:
+ota:
+web_server:
+
+sensor:
+  # DHT11
+  - platform: dht
+    pin: D1
+    temperature:
+      name: "${location} Temperature"
+      # id: ${location}_temperature
+      filters:
+        - offset: -6.2 # -4ºF
+    humidity:
+      name: "${location} Humidity"
+    update_interval: 60s

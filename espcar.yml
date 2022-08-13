@@ -1,0 +1,66 @@
+substitutions:
+  esp_hostname: espcar
+
+esphome:
+  name: ${esp_hostname}
+  platform: ESP32
+  board: nodemcu-32s # pinout https://m.media-amazon.com/images/I/71d6+P4PUzL._SL1067_.jpg
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+logger:
+ota:
+web_server:
+
+binary_sensor:
+  - platform: template
+    name: "Car Tailgate Open"
+    id: car_tailgate_open
+    lambda: |-
+      // used to be .2 but when car is under sensor, it's ~.46
+      if (id(car_distance_sensor).state > 0 && id(car_distance_sensor).state < .5) {
+        // Tailgate open
+        return true;
+      } else {
+        // Tailgate closed
+        return false;
+      }
+
+  - platform: gpio
+    name: "Garage Motion Sensor"
+    id: garage_motion_sensor
+    pin: 12
+    device_class: motion
+    filters:
+      - delayed_off: 120s
+
+# This won't work unless sensor is inside the garage
+# - platform: template
+# name: "Car Present"
+# id: car_present
+# lambda: |-
+#   if (id(car_distance_sensor).state < .5) {
+#     // Car is present
+#     return true;
+#   } else {
+#     // Car is not present
+#     return false;
+#   }
+
+sensor:
+  - platform: ultrasonic
+    name: "Car Ultrasonic Sensor"
+    id: car_distance_sensor
+    trigger_pin: 23
+    echo_pin: 22
+    update_interval: 1s
+    filters:
+      - filter_out: 0.00
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 5
+      - filter_out: 0.00
