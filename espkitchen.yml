@@ -8,7 +8,7 @@ substitutions:
 esphome:
   name: ${esp_hostname}
   platform: ESP32
-  board: esp32dev
+  board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
 
 wifi:
   ssid: !secret wifi_ssid
@@ -19,6 +19,11 @@ captive_portal:
 logger:
 ota:
 web_server:
+
+status_led:
+  pin:
+    number: GPIO2
+    inverted: true
 
 esp32_ble_tracker:
   scan_parameters:

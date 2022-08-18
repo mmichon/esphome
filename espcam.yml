@@ -4,7 +4,7 @@ substitutions:
 esphome:
   name: ${esp_hostname}
   platform: ESP32
-  board: esp32dev
+  board: esp32dev # https://randomnerdtutorials.com/esp32-cam-ai-thinker-pinout/
 
 wifi:
   ssid: !secret wifi_ssid
@@ -16,6 +16,11 @@ logger:
 ota:
 web_server:
   port: 80
+
+status_led:
+  pin:
+    number: GPIO33
+    inverted: true
 
 time:
   - platform: homeassistant

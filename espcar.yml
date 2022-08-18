@@ -4,7 +4,7 @@ substitutions:
 esphome:
   name: ${esp_hostname}
   platform: ESP32
-  board: nodemcu-32s # pinout https://m.media-amazon.com/images/I/71d6+P4PUzL._SL1067_.jpg
+  board: nodemcu-32s # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
 
 wifi:
   ssid: !secret wifi_ssid
@@ -15,6 +15,11 @@ captive_portal:
 logger:
 ota:
 web_server:
+
+status_led:
+  pin:
+    number: GPIO2
+    inverted: true
 
 binary_sensor:
   - platform: template
