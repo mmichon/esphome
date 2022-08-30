@@ -22,7 +22,7 @@ status_led:
 
 remote_transmitter:
   - id: ir_transmitter
-    pin: D1
+    pin: D8
     carrier_duty_percent: 50%
 
 # https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
@@ -31,22 +31,25 @@ binary_sensor:
   - platform: gpio
     name: "In-law Motion Sensor"
     id: inlaw_motion_sensor
-    pin: D2
+    pin: D7
     device_class: motion
     filters:
       - delayed_off: 120s
 
-dallas:
-  - pin: D7
+i2c:
+  scl: D1
+  sda: D2
+  scan: true
+  id: bus_a
 
 sensor:
-  # KY001/DS18B20
-  - platform: dallas
-    address: 0x536B23C40664FF28
-    name: "In-law Temperature"
-    id: in_law_temperature
-    filters:
-      - offset: -2.77 # 5ºF
+  - platform: sht3xd
+    temperature:
+      name: "In-law Temperature"
+    humidity:
+      name: "In-law Humidity"
+    address: 0x44
+    update_interval: 60s
 
 switch:
   - platform: gpio
