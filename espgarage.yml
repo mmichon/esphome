@@ -10,7 +10,6 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-api:
 captive_portal:
 logger:
 ota:
@@ -49,6 +48,19 @@ binary_sensor:
   #     inverted: False
   #     mode: INPUT_PULLUP
 
+api:
+  services:
+    - service: long_gate_open
+      then:
+        - switch.turn_on: gate_buzzer
+        - delay: 8s
+        - switch.turn_off: gate_buzzer
+    - service: short_gate_open
+      then:
+        - switch.turn_on: gate_buzzer
+        - delay: 4s
+        - switch.turn_off: gate_buzzer
+
 switch:
   - platform: restart
     name: "${hostname} Restart"
@@ -69,7 +81,7 @@ switch:
     id: gate_buzzer
     # internal: true
     on_turn_on:
-      - delay: 4s
+      - delay: 8s
       - switch.turn_off: gate_buzzer
 
   # - platform: template
