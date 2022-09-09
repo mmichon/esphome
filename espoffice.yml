@@ -1,6 +1,6 @@
 substitutions:
   location: Office
-  esp_hostname: espbedroom
+  esp_hostname: espoffice
 
 esphome:
   name: ${esp_hostname}
@@ -16,6 +16,10 @@ captive_portal:
 logger:
 ota:
 web_server:
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
 
 status_led:
   pin:

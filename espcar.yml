@@ -16,6 +16,10 @@ logger:
 ota:
 web_server:
 
+switch:
+  - platform: restart
+    name: "${esp_hostname} Restart"
+
 status_led:
   pin:
     number: GPIO2

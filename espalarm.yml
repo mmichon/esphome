@@ -15,6 +15,10 @@ logger:
 ota:
 web_server:
 
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
 status_led:
   pin:
     number: D4

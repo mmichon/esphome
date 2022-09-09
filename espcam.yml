@@ -17,6 +17,10 @@ ota:
 web_server:
   port: 80
 
+switch:
+  - platform: restart
+    name: "${esp_hostname} Restart"
+
 status_led:
   pin:
     number: GPIO33
