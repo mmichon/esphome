@@ -2,7 +2,7 @@
 
 substitutions:
   esp_name: Paper # Device Name
-  esp_hostname: esppaper
+  hostname: esppaper
   run_time: 1min # can be as long as needed to get data
   plugged_in_sleep_time: 1min
   unplugged_sleep_time: 15min # normal sleep time
@@ -12,7 +12,7 @@ substitutions:
   min_voltage: "3.3"
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
 
 esp32:
   board: esp32dev

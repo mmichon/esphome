@@ -1,8 +1,8 @@
 substitutions:
-  esp_hostname: espcar
+  hostname: espcar
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP32
   board: nodemcu-32s # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
 
@@ -18,7 +18,7 @@ web_server:
 
 switch:
   - platform: restart
-    name: "${esp_hostname} Restart"
+    name: "${hostname} Restart"
 
 status_led:
   pin:

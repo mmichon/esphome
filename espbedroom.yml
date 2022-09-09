@@ -1,8 +1,8 @@
 substitutions:
-  esp_hostname: espbedroom
+  hostname: espbedroom
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP8266
   board: d1_mini # pinout https://m.media-amazon.com/images/I/71d6+P4PUzL._SL1067_.jpg
 
@@ -18,7 +18,7 @@ web_server:
 
 switch:
   - platform: restart
-    name: "${esp_hostname} Restart"
+    name: "${hostname} Restart"
 
 sensor:
   # DHT11

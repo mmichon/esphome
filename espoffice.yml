@@ -1,9 +1,9 @@
 substitutions:
   location: Office
-  esp_hostname: espoffice
+  hostname: espoffice
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP8266
   board: d1_mini # pinout https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 

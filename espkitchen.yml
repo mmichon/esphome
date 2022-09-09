@@ -1,12 +1,12 @@
 substitutions:
-  esp_hostname: espkitchen
+  hostname: espkitchen
   yourname: Nanny
   roomname: Home
   rssi_present: id(harssi_present).state # 84
   rssi_not_present: id(harssi_not_present).state # 91
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP32
   board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
 
@@ -22,7 +22,7 @@ web_server:
 
 switch:
   - platform: restart
-    name: "${esp_hostname} Restart"
+    name: "${hostname} Restart"
 
 status_led:
   pin:

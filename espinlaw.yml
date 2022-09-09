@@ -1,8 +1,8 @@
 substitutions:
-  esp_hostname: espinlaw
+  hostname: espinlaw
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP8266
   board: d1_mini # pinout https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 
@@ -55,7 +55,7 @@ sensor:
 
 switch:
   - platform: restart
-    name: "${esp_hostname} Restart"
+    name: "${hostname} Restart"
 
   - platform: gpio
     id: desk_up_button

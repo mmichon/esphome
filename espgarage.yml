@@ -1,8 +1,8 @@
 substitutions:
-  esp_hostname: espgarage
+  hostname: espgarage
 
 esphome:
-  name: ${esp_hostname}
+  name: ${hostname}
   platform: ESP32
   board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
 
@@ -51,7 +51,7 @@ binary_sensor:
 
 switch:
   - platform: restart
-    name: "${esp_hostname} Restart"
+    name: "${hostname} Restart"
 
   - platform: gpio
     pin: 18 #D18
