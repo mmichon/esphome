@@ -11,6 +11,7 @@ wifi:
   password: !secret wifi_password
 
 captive_portal:
+
 logger:
 ota:
 web_server:
@@ -110,7 +111,6 @@ switch:
 cover:
   - platform: template
     name: "Garage Door"
-    id: garage_lock
     device_class: garage
     optimistic: true
     lambda: |-
@@ -118,19 +118,29 @@ cover:
         return COVER_OPEN;
       } else {
         return COVER_CLOSED;
-      }
+      }-
+    # chatgpt used for the below logic
     open_action:
-      - switch.turn_on: garage_button_relay
-      - delay: 0.5s
-      - switch.turn_off: garage_button_relay
+      - if:
+          condition:
+            lock.is_unlocked: garage_lock
+          then:
+            - switch.turn_on: garage_button_relay
+            - delay: 0.5s
+            - switch.turn_off: garage_button_relay
     close_action:
-      - switch.turn_on: garage_button_relay
-      - delay: 0.5s
-      - switch.turn_off: garage_button_relay
+      - if:
+          condition:
+            lock.is_unlocked: garage_lock
+          then:
+            - switch.turn_on: garage_button_relay
+            - delay: 0.5s
+            - switch.turn_off: garage_button_relay
 
 lock:
   - platform: template
     name: "Garage Lock"
+    id: garage_lock
     optimistic: true
     on_lock:
       - switch.turn_on: extend_lock
@@ -141,16 +151,3 @@ lock:
       - switch.turn_on: retract_lock
       - delay: 1sec
       - switch.turn_off: retract_lock
-      # retract_lock and extend_lock are reversed
-# - platform: time_based
-#   name: "Garage Lock"
-#   # device_class: damper
-#   close_action:
-#     - switch.turn_on: extend_lock
-#   open_duration: 1sec
-#   open_action:
-#     - switch.turn_on: retract_lock
-#   close_duration: 1sec
-#   stop_action:
-#     - switch.turn_off: extend_lock
-#     - switch.turn_off: retract_lock
