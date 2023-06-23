@@ -32,7 +32,6 @@ sensor:
     pin: D1
     temperature:
       name: "${location} Temperature"
-      # id: ${location}_temperature
       filters:
         - offset: -6.2 # -4ºF
     humidity:
