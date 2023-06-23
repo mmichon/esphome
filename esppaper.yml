@@ -7,9 +7,9 @@ substitutions:
   plugged_in_sleep_time: 1min
   unplugged_sleep_time: 15min # normal sleep time
   night_sleep_time: 6h # 1st sleep time after midnight
-  max_voltage: "4.2" # max battery-based (not plugged-in) voltage
+  max_voltage: "4.1" # max battery-based (not plugged-in) voltage
   # max_voltage: "5.0" # max battery-based (not plugged-in) voltage
-  min_voltage: "3.3"
+  min_voltage: "3.13"
 
 esphome:
   name: ${hostname}
@@ -22,6 +22,7 @@ esp32:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  fast_connect: true
 
 api:
 captive_portal:
@@ -529,6 +530,8 @@ display:
           if (id(batt).state < 20) {
             it.printf(x1n, y1, id(font_icons_tiny), TextAlign::BASELINE_LEFT, "\U000F12A1");
             it.printf(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Display battery is low. Recharge.");
+            y1 += text_pad;
+            y2 += text_pad;
           }
 
           if (!(id(armed_mode).state == "disarmed")) {
@@ -646,8 +649,7 @@ display:
           it.print(x1n, y1, id(font_name), TextAlign::BASELINE_LEFT, "Nursery");
           y1 += val_pad;
           it.printf(x1n, y1, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F138B");
-          it.printf(x1v + 60, y1, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_nursery).state
-            * 1.8 + 32);
+          it.printf(x1v + 60, y1, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_nursery).state);
           y1 += cat_pad;
 
           it.print(x1n, y1, id(font_name), TextAlign::BASELINE_LEFT, "Bedroom");
@@ -706,20 +708,21 @@ display:
           // ****** POWER ******
 
           y4 = 275 + cat_pad + val_pad;
-          it.print(x4n+20, y4-10, id(font_name), TextAlign::BASELINE_LEFT, "Power");
-          y4+=val_pad;
+          it.print(x4n+20, y4, id(font_name), TextAlign::BASELINE_LEFT, "Power");
+          y4+=val_pad+10;
           it.printf(x4n-40, y4, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F07E9");
-          it.printf(x4v+20, y4-45, id(font_name), TextAlign::BASELINE_LEFT, "max: %.0fW", id(home_power_max).state);
-          it.printf(x4v+20, y4-15, id(font_name), TextAlign::BASELINE_LEFT, "ave: %.0fW", id(home_power_ave).state);
-          it.printf(x4v+20, y4+15, id(font_name), TextAlign::BASELINE_LEFT, "min: %.0fW", id(home_power_min).state);
+          it.printf(x4v+20, y4-45, id(font_footer), TextAlign::BASELINE_LEFT, "max: %.0fW", id(home_power_max).state);
+          it.printf(x4v+20, y4-15, id(font_footer), TextAlign::BASELINE_LEFT, "ave: %.0fW", id(home_power_ave).state);
+          it.printf(x4v+20, y4+15, id(font_footer), TextAlign::BASELINE_LEFT, "min: %.0fW", id(home_power_min).state);
 
           // ****** FOOTER ******
-          it.strftime(xres / 2, yres - y_pad / 2, id(font_footer), TextAlign::BASELINE_CENTER, "Updated: %I:%M %p", id(ntp).now());
-
-          if(id(VCC).state < ${max_voltage}){ // only show battery stats if we're not plugged in
+          // if(id(VCC).state < ${max_voltage}){ // only show battery stats if we're not plugged in
           // it.printf(0, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_LEFT, "  %s left", id(uptime_left_human).state.c_str());
-          it.printf(xres-x_pad, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_RIGHT, "Battery: %.2fV/%.0f%%", id(VCC).state, id(batt).state);
-          }
+          // it.printf(xres-x_pad, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_RIGHT, "Battery:
+          it.printf(20, yres-y_pad/2, id(font_footer), TextAlign::BASELINE_LEFT, "Battery: %.2fV/%.0f%%", id(VCC).state, id(batt).state);
+          // }
+
+          it.strftime(xres / 2, yres - y_pad / 2, id(font_footer), TextAlign::BASELINE_CENTER, "Updated: %I:%M %p", id(ntp).now());
 
       - id: wifi_qr_page
         lambda: |-
