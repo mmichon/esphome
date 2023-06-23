@@ -1,5 +1,6 @@
 substitutions:
   hostname: espinlaw
+  low_light_level: "5"
 
 esphome:
   name: ${hostname}
@@ -10,6 +11,7 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+api:
 captive_portal:
 logger:
 ota:
@@ -20,23 +22,10 @@ status_led:
     number: D4
     inverted: true
 
-remote_transmitter:
-  - id: ir_transmitter
-    pin: D8
-    carrier_duty_percent: 50%
-
 # https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 # ok: 1, 2, 5, 6, 7
-binary_sensor:
-  - platform: gpio
-    name: "In-law Motion Sensor"
-    id: inlaw_motion_sensor
-    pin: D7
-    device_class: motion
-    filters:
-      - delayed_off: 120s
 
-i2c:
+i2c: # for temperature sensor
   scl: D1
   sda: D2
   scan: true
@@ -46,12 +35,41 @@ sensor:
   - platform: sht3xd
     temperature:
       name: "In-law Temperature"
-      filters:
-        - offset: -2.7 # -5ºF
+      # filters:
+      #   - offset: -2.7 # -5ºF
     humidity:
       name: "In-law Humidity"
     address: 0x44
     update_interval: 60s
+
+  - platform: adc
+    pin: A0
+    name: "In-law Light Level"
+    id: in_law_light_level
+    update_interval: 1s
+    unit_of_measurement: "%"
+    filters:
+      - multiply: 100 # to convert to %
+      - sliding_window_moving_average:
+          send_every: 60
+
+binary_sensor:
+  - platform: gpio
+    name: "In-law Motion Sensor"
+    id: inlaw_motion_sensor
+    pin: D7
+    device_class: motion
+    filters:
+      - delayed_off: 120s
+
+  - platform: template
+    name: "In-law Is Dark"
+    lambda: |-
+      if (id(in_law_light_level).state > ${low_light_level}) {
+        return false;
+      } else {
+        return true;
+      }
 
 switch:
   - platform: restart
@@ -63,21 +81,22 @@ switch:
     pin: D5
     restore_mode: ALWAYS_OFF
     internal: true
-    interlock: &interlock [desk_up_button, desk_down_button]
+    interlock: &desk_buttons [desk_up_button, desk_down_button]
+
   - platform: gpio
     id: desk_down_button
     name: "Desk Down Button"
     pin: D6
     restore_mode: ALWAYS_OFF
     internal: true
-    interlock: *interlock
+    interlock: *desk_buttons
 
   - platform: template
     name: "Desk Raised"
     id: desk_raised
     icon: "mdi:desk"
     optimistic: true
-    restore_state: true
+    restore_state: false
     turn_on_action:
       - switch.turn_on: desk_up_button
       - delay: 16.3s
@@ -95,6 +114,7 @@ switch:
       - switch.turn_on: desk_up_button
       - delay: 1s
       - switch.turn_off: desk_up_button
+
 # cover:
 #   - platform: time_based
 #     name: "Desk Height"
@@ -110,21 +130,3 @@ switch:
 #     stop_action:
 #       - switch.turn_off: desk_up_button
 #       - switch.turn_off: desk_down_button
-
-api:
-  services:
-    - service: hk_tv
-      then:
-        - remote_transmitter.transmit_pronto:
-            transmitter_id: ir_transmitter
-            data: "0000 006D 0021 0000 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0018 0014 0017 0040 0017 0014 0017 0014 0017 0014 0017 0014 0017 0040 0017 0040 0017 0040 0017 0014 0017 003F 0018 003F 0018 0013 0018 0013 0018 003F 0018 0013 0018 003F 0018 003F 0018 0013 0018 0013 0018 003F 0018 003F 0018 0013 0018 003F 0018 0013 0018 0013 0018 06C3"
-    - service: tv_power
-      then:
-        - remote_transmitter.transmit_pioneer:
-            transmitter_id: ir_transmitter
-            rc_code_1: 0x2008
-    - service: tv_netflix
-      then:
-        - remote_transmitter.transmit_pioneer:
-            transmitter_id: ir_transmitter
-            rc_code_1: 0x20EB
