@@ -5,6 +5,10 @@ esphome:
   name: ${hostname}
   platform: ESP32
   board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
+  on_boot:
+    priority: 600
+    then:
+      - lock.unlock: garage_lock
 
 wifi:
   ssid: !secret wifi_ssid
@@ -14,6 +18,7 @@ captive_portal:
 
 logger:
 ota:
+    platform: esphome
 web_server:
 
 status_led:
@@ -118,7 +123,7 @@ cover:
         return COVER_OPEN;
       } else {
         return COVER_CLOSED;
-      }-
+      }
     # chatgpt used for the below logic
     open_action:
       - if:
@@ -142,12 +147,13 @@ lock:
     name: "Garage Lock"
     id: garage_lock
     optimistic: true
-    on_lock:
+    disabled_by_default: true
+    lock_action:
       - switch.turn_on: extend_lock
       - delay: 1sec
       - switch.turn_off: extend_lock
 
-    on_unlock:
+    unlock_action:
       - switch.turn_on: retract_lock
-      - delay: 1sec
+      - delay: 2sec
       - switch.turn_off: retract_lock

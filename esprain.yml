@@ -1,0 +1,55 @@
+substitutions:
+  location: Backyard
+  hostname: esprain
+
+esphome:
+  name: ${hostname}
+  friendly_name: Espresso Water Detector
+  platform: ESP32
+  board: dfrobot_beetle_esp32c3 # https://wiki.dfrobot.com/SKU_DFR0868_Beetle_ESP32_C3
+  on_boot:
+    # priority: -100
+    then:
+      - wait_until:
+          condition:
+            mqtt.connected:
+          timeout: 8s
+      - delay: 2s # delay to let it upload
+      - logger.log: "Booted and API uploaded. Going to sleep."
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+deep_sleep:
+  id: "deep_sleep_1"
+  run_duration: "1s"
+  sleep_duration: "5 min"
+logger:
+mqtt:
+  broker: "10.0.0.2"
+  discovery: False
+  discovery_retain: False
+  # on_disconnect:
+  # - logger.log: "MQTT disconnected. Setting done pin."
+  # - switch.turn_on: sleep_pin # Tells the TPL5110 to go to low power mode for a while
+  # Resistor-time mappings: https://www.ti.com/lit/ds/symlink/tpl5110.pdf
+ota:
+  platform: esphome
+web_server:
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+binary_sensor:
+  # XKC-Y23 water level sensor
+  - platform: gpio
+    pin: 4
+    name: "Raining"
+    id: raining
+    filters:
+      - invert:

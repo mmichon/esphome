@@ -4,6 +4,7 @@ substitutions:
 
 esphome:
   name: ${hostname}
+  friendly_name: Desk Controller
   platform: ESP8266
   board: d1_mini # pinout https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 
@@ -15,6 +16,7 @@ api:
 captive_portal:
 logger:
 ota:
+  platform: esphome
 web_server:
 
 status_led:
@@ -91,12 +93,13 @@ switch:
     internal: true
     interlock: *desk_buttons
 
+
   - platform: template
     name: "Desk Raised"
     id: desk_raised
     icon: "mdi:desk"
     optimistic: true
-    restore_state: false
+    restore_mode: DISABLED
     turn_on_action:
       - switch.turn_on: desk_up_button
       - delay: 16.3s
@@ -115,18 +118,18 @@ switch:
       - delay: 1s
       - switch.turn_off: desk_up_button
 
-# cover:
-#   - platform: time_based
-#     name: "Desk Height"
+cover:
+  - platform: time_based
+    name: "Desk Height"
 
-#     open_action:
-#       - switch.turn_on: desk_up_button
-#     open_duration: 16.3s
+    open_action:
+      - switch.turn_on: desk_up_button
+    open_duration: 16.3s
 
-#     close_action:
-#       - switch.turn_on: desk_down_button
-#     close_duration: 15.2s
+    close_action:
+      - switch.turn_on: desk_down_button
+    close_duration: 15.2s
 
-#     stop_action:
-#       - switch.turn_off: desk_up_button
-#       - switch.turn_off: desk_down_button
+    stop_action:
+      - switch.turn_off: desk_up_button
+      - switch.turn_off: desk_down_button

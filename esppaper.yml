@@ -9,7 +9,7 @@ substitutions:
   night_sleep_time: 6h # 1st sleep time after midnight
   max_voltage: "4.1" # max battery-based (not plugged-in) voltage
   # max_voltage: "5.0" # max battery-based (not plugged-in) voltage
-  min_voltage: "3.13"
+  min_voltage: "3.13" # actual
 
 esphome:
   name: ${hostname}
@@ -211,7 +211,7 @@ binary_sensor:
 
 text_sensor:
   - platform: homeassistant
-    entity_id: alarm_control_panel.sf_alarm
+    entity_id: alarm_control_panel.147_alarm
     id: armed_mode
     internal: true
 
@@ -341,7 +341,7 @@ sensor:
     internal: true
 
   - platform: homeassistant
-    entity_id: sensor.office_temperature
+    entity_id: sensor.desk_temperature
     id: temp_office
     internal: true
 
@@ -534,16 +534,23 @@ display:
             y2 += text_pad;
           }
 
-          if (!(id(armed_mode).state == "disarmed")) {
+          // if (!(id(armed_mode).state == "disarmed")) {
+          //   it.printf(x1n, y1, id(font_icons_tiny), TextAlign::BASELINE_LEFT, "\U000F0CCC");
+          //   it.print(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Alarm is armed.");
+          //   y1 += text_pad;
+          //   y2 += text_pad;
+          // }
+
+          if (id(armed_mode).state == "armed_night") {
             it.printf(x1n, y1, id(font_icons_tiny), TextAlign::BASELINE_LEFT, "\U000F0CCC");
-            it.print(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Alarm is armed.");
+            it.print(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Alarm is armed for night.");
             y1 += text_pad;
             y2 += text_pad;
           }
 
           if (id(armed_mode).state == "armed_away") {
             it.printf(x1n, y1, id(font_icons_tiny), TextAlign::BASELINE_LEFT, "\U000F0092");
-            it.print(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Away mode is on.");
+            it.print(x1v + 60, y1, id(font_name), TextAlign::BASELINE_LEFT, "Alarm is armed for away.");
             y1 += text_pad;
             y2 += text_pad;
           }
@@ -652,10 +659,10 @@ display:
           it.printf(x1v + 60, y1, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_nursery).state);
           y1 += cat_pad;
 
-          it.print(x1n, y1, id(font_name), TextAlign::BASELINE_LEFT, "Bedroom");
-          y1 += val_pad;
-          it.printf(x1n, y1, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F02E3");
-          it.printf(x1v + 60, y1, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_bedroom).state);
+          // it.print(x1n, y1, id(font_name), TextAlign::BASELINE_LEFT, "Bedroom");
+          // y1 += val_pad;
+          // it.printf(x1n, y1, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F02E3");
+          // it.printf(x1v + 60, y1, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_bedroom).state);
 
           it.print(x2n, y2, id(font_name), TextAlign::BASELINE_LEFT, "Office");
           y2 += val_pad;
@@ -663,10 +670,10 @@ display:
           it.printf(x2v + 60, y2, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_office).state);
           y2 += cat_pad;
 
-          it.print(x2n, y2, id(font_name), TextAlign::BASELINE_LEFT, "In-law");
-          y2 += val_pad;
-          it.printf(x2n, y2, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F07F4");
-          it.printf(x2v + 60, y2, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_in_law).state);
+          // it.print(x2n, y2, id(font_name), TextAlign::BASELINE_LEFT, "In-law");
+          // y2 += val_pad;
+          // it.printf(x2n, y2, id(font_icons_small), TextAlign::BASELINE_LEFT, "\U000F07F4");
+          // it.printf(x2v + 60, y2, id(font_value), TextAlign::BASELINE_LEFT, "%.0f°", id(temp_in_law).state);
 
           it.print(x3n, y3, id(font_name), TextAlign::BASELINE_LEFT, "Backyard");
           y3 += val_pad;

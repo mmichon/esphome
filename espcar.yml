@@ -1,10 +1,10 @@
 substitutions:
-  hostname: espcar
+  hostname: espgaragemotion
 
 esphome:
   name: ${hostname}
-  platform: ESP32
-  board: nodemcu-32s # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
+  platform: ESP8266
+  board: d1_mini # pinout https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
 
 wifi:
   ssid: !secret wifi_ssid
@@ -14,6 +14,7 @@ api:
 captive_portal:
 logger:
 ota:
+  platform: esphome
 web_server:
 
 switch:
@@ -22,54 +23,15 @@ switch:
 
 status_led:
   pin:
-    number: GPIO2
+    number: D4
     inverted: true
 
 binary_sensor:
-  - platform: template
-    name: "Car Tailgate Open"
-    id: car_tailgate_open
-    lambda: |-
-      // used to be .2 but when car is under sensor, it's ~.46
-      if (id(car_distance_sensor).state > 0 && id(car_distance_sensor).state < .5) {
-        // Tailgate open
-        return true;
-      } else {
-        // Tailgate closed
-        return false;
-      }
-
   - platform: gpio
     name: "Garage Motion Sensor"
     id: garage_motion_sensor
-    pin: 12
+    pin: D1
     device_class: motion
-    filters:
-      - delayed_off: 120s
-
-# This won't work unless sensor is inside the garage
-# - platform: template
-# name: "Car Present"
-# id: car_present
-# lambda: |-
-#   if (id(car_distance_sensor).state < .5) {
-#     // Car is present
-#     return true;
-#   } else {
-#     // Car is not present
-#     return false;
-#   }
-
-sensor:
-  - platform: ultrasonic
-    name: "Car Ultrasonic Sensor"
-    id: car_distance_sensor
-    trigger_pin: 23
-    echo_pin: 22
-    update_interval: 1s
-    filters:
-      - filter_out: 0.00
-      - sliding_window_moving_average:
-          window_size: 5
-          send_every: 5
-      - filter_out: 0.00
+    # filters:
+    #   - delayed_off: 120s
+    publish_initial_state: true
