@@ -1,0 +1,877 @@
+esphome:
+  name: trmnl
+  friendly_name: trmnl
+  on_boot:
+    priority: 600
+    then:
+      - output.turn_on: bsp_battery_enable
+      - delay: 200ms
+      - component.update: battery_voltage
+      - component.update: battery_level
+      # Initialize refresh cycle
+      - lambda: |-
+          setCpuFrequencyMhz(240);
+          id(initial_data_loaded) = false;
+          id(cycle_update_done) = false;
+          id(update_start_millis) = millis();
+          id(display_update_pending) = true;
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: sensor.lights_count
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: climate.infinitive
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: cover.garage_door_2
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: lock.garage_lock
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.upstairs_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.wifi_door_3
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.wyzesense_patio_door
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.garage_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: sensor.147_123_1min
+      # Initial render will wait for HA data via sensor callbacks below
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+# Enable logging - minimal level for battery optimization
+logger:
+  level: DEBUG  # DEBUG for troubleshooting
+  logs:
+    esphome: INFO
+    main: DEBUG
+
+# Configure preferences to reduce flash writes
+preferences:
+  flash_write_interval: 1h  # Only write to flash once per hour max
+
+# Enable Home Assistant API
+api:
+  id: api_server
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+
+deep_sleep:
+  id: managed_sleep
+  sleep_duration: 30min
+  wakeup_pin:
+    number: GPIO0
+    mode: INPUT_PULLUP
+    inverted: true
+  wakeup_pin_mode: KEEP_AWAKE
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  fast_connect: true
+  reboot_timeout: 5min
+  on_connect:
+    then:
+      - logger.log: "WiFi connected successfully"
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: sensor.lights_count
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: climate.infinitive
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: cover.garage_door_2
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: lock.garage_lock
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.upstairs_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.wifi_door_3
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.wyzesense_patio_door
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.garage_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: sensor.147_123_1min
+
+captive_portal:
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+# Fonts - Using local fonts to avoid network issues
+font:
+  - file: "fonts/GoogleSans-Bold.ttf"
+    id: small_font
+    size: 24
+  - file: "fonts/GoogleSans-Bold.ttf"
+    id: tiny_font
+    size: 18
+  - file: "fonts/GoogleSans-Bold.ttf"
+    id: mid_font
+    size: 36
+  - file: "fonts/GoogleSans-Bold.ttf"
+    id: power_font_small
+    size: 30
+  - file: "fonts/GoogleSans-Bold.ttf"
+    id: big_font
+    size: 135
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: font_bat_icon
+    size: 24
+    glyphs:
+      - "\U000F007A" # mdi-battery-10
+      - "\U000F007B" # mdi-battery-20
+      - "\U000F007C" # mdi-battery-30
+      - "\U000F007D" # mdi-battery-40
+      - "\U000F007E" # mdi-battery-50
+      - "\U000F007F" # mdi-battery-60
+      - "\U000F0080" # mdi-battery-70
+      - "\U000F0081" # mdi-battery-80
+      - "\U000F0082" # mdi-battery-90
+      - "\U000F0079" # mdi-battery
+      - "\U000F0084" # mdi-battery-100 (full battery)
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: door_icon_font
+    size: 48
+    glyphs:
+      - "\U000F02D8" # garage
+      - "\U000F11B8" # door-open
+      - "\U000F01D7" # door-closed
+      - "\U000F033E" # lock
+      - "\U000F033F" # lock-open
+      - "\U000F002F" # alert
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: alarm_status_font
+    size: 24
+    glyphs:
+      - "\U000F033E" # lock (armed)
+      - "\U000F033F" # lock-open (disarmed)
+      - "\U000F002F" # alert (unknown/error)
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: guest_icon_font
+    size: 72
+    glyphs:
+      - "\U000F02E3" # bed (guest active)
+      - "\U000F08A0" # bed-empty (guest inactive)
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: package_icon_font
+    size: 48
+    glyphs:
+      - "\U000F0493" # package-variant-closed
+      - "\U000F0492" # package-variant
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: spinner_font
+    size: 48
+    glyphs:
+      - "\U000F0765" # loading (spinner icon)
+
+globals:
+  - id: battery_glyph
+    type: std::string
+    restore_value: no
+    initial_value: R"(\U000F0079)"
+  - id: alarm_status_glyph
+    type: std::string
+    restore_value: no
+    initial_value: R"(\U000F002F)"  # alert (unknown)
+  - id: initial_data_loaded
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: power_stats
+    type: float[2]
+    restore_value: no
+    initial_value: "{0.0f, -1.0f}"
+  - id: power_stats_day
+    type: int
+    restore_value: no
+    initial_value: "-1"
+  - id: power_stats_initialized
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: display_update_pending
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: cycle_update_done
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: package_detected
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: update_start_millis
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: last_update_time
+    type: std::string
+    restore_value: no
+    initial_value: ""
+
+script:
+  - id: queue_display_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          id(update_start_millis) = millis();
+          id(display_update_pending) = true;
+          id(cycle_update_done) = false;
+  - id: delayed_deep_sleep
+    mode: restart
+    then:
+      - delay: 200ms
+      - lambda: |-
+          ESP_LOGI("main", "Entering deep sleep");
+          id(managed_sleep).begin_sleep(true);
+
+sensor:
+  - platform: adc
+    pin: GPIO1
+    name: "Battery Voltage"
+    id: battery_voltage
+    attenuation: 12db
+    filters:
+      - multiply: 2.0
+    # Sample once per minute for battery telemetry
+    update_interval: 60s
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Battery voltage sample: %.3f V", id(battery_voltage).state);
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    unit_of_measurement: "%"
+    icon: "mdi:battery"
+    device_class: battery
+    state_class: measurement
+    lambda: "return id(battery_voltage).state;"
+    filters:
+      - calibrate_linear:
+          - 4.15 -> 100.0
+          - 3.96 -> 90.0
+          - 3.91 -> 80.0
+          - 3.85 -> 70.0
+          - 3.80 -> 60.0
+          - 3.75 -> 50.0
+          - 3.68 -> 40.0
+          - 3.58 -> 30.0
+          - 3.49 -> 20.0
+          - 3.41 -> 10.0
+          - 3.30 -> 5.0
+          - 3.27 -> 0.0
+      - clamp:
+          min_value: 0
+          max_value: 100
+    on_value:
+      then:
+        - lambda: |-
+            float level = x;
+            if (level >= 100) {
+              id(battery_glyph) = "\U000F0084"; // mdi-battery-100 (full battery)
+            } else if (level >= 90) {
+              id(battery_glyph) = "\U000F0082"; // mdi-battery-90
+            } else if (level >= 80) {
+              id(battery_glyph) = "\U000F0081"; // mdi-battery-80
+            } else if (level >= 70) {
+              id(battery_glyph) = "\U000F0080"; // mdi-battery-70
+            } else if (level >= 60) {
+              id(battery_glyph) = "\U000F007F"; // mdi-battery-60
+            } else if (level >= 50) {
+              id(battery_glyph) = "\U000F007E"; // mdi-battery-50
+            } else if (level >= 40) {
+              id(battery_glyph) = "\U000F007D"; // mdi-battery-40
+            } else if (level >= 30) {
+              id(battery_glyph) = "\U000F007C"; // mdi-battery-30
+            } else if (level >= 20) {
+              id(battery_glyph) = "\U000F007B"; // mdi-battery-20
+            } else if (level >= 10) {
+              id(battery_glyph) = "\U000F007A"; // mdi-battery-10
+            } else {
+              id(battery_glyph) = "\U000F0079"; // mdi-battery (empty)
+            }
+  - platform: homeassistant
+    id: lights_on
+    entity_id: sensor.lights_count
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Received lights count data: %.0f", x);
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: indoor_temp
+    entity_id: climate.infinitive
+    attribute: current_temperature
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Received indoor temp data: %.1f", x);
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: furnace_setting
+    entity_id: climate.infinitive
+    attribute: temperature
+  - platform: template
+    name: "Daily Power Min"
+    id: daily_power_min
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    state_class: measurement
+    lambda: |-
+      if (id(power_stats)[1] < 0.0f) {
+        return NAN;
+      }
+      return id(power_stats)[1];
+    update_interval: never
+  - platform: template
+    name: "Daily Power Max"
+    id: daily_power_max
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    state_class: measurement
+    lambda: |-
+      if (id(power_stats)[0] <= 0.0f) {
+        return NAN;
+      }
+      return id(power_stats)[0];
+    update_interval: never
+
+output:
+  - platform: gpio
+    pin: GPIO6
+    id: bsp_battery_enable
+
+button:
+  - platform: factory_reset
+    name: "Factory Reset"
+    id: factory_reset_button
+    entity_category: config
+
+binary_sensor:
+  - platform: homeassistant
+    id: entry_door
+    entity_id: binary_sensor.upstairs_entry_contact
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Entry door state updated: %d (has_state=%d)", x, id(entry_door).has_state());
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: upstairs_patio_door
+    entity_id: binary_sensor.wifi_door_3
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Upstairs patio door state updated: %d (has_state=%d)", x, id(upstairs_patio_door).has_state());
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: inlaw_door
+    entity_id: binary_sensor.wyzesense_patio_door
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "In-law door state updated: %d (has_state=%d)", x, id(inlaw_door).has_state());
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: inlaw_patio_door
+    entity_id: binary_sensor.wyzesense_patio_door
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "In-law patio door state updated: %d (has_state=%d)", x, id(inlaw_patio_door).has_state());
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: garage_entry_door
+    entity_id: binary_sensor.garage_entry_contact
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Garage entry door state updated: %d (has_state=%d)", x, id(garage_entry_door).has_state());
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: guest_mode
+    entity_id: input_boolean.guest_mode
+    on_state:
+      then:
+        - lambda: |-
+            ESP_LOGD("main", "Guest mode updated: %d", x);
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: package_sensor
+    entity_id: input_boolean.package_detected
+    on_state:
+      then:
+        - lambda: |-
+            id(package_detected) = x;
+            ESP_LOGI("main", "Package detected helper updated: %d", x);
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+# Home Assistant time
+time:
+  - platform: homeassistant
+    id: ha_time
+
+# Timeout fallback to prevent infinite loading
+interval:
+  - interval: 2s
+    then:
+      - lambda: |-
+          const uint32_t now_ms = millis();
+          bool has_lights = id(lights_on).has_state();
+          bool has_indoor_temp = id(indoor_temp).has_state();
+          bool has_power = id(current_power_usage).has_state();
+          bool has_guest_mode = id(guest_mode).has_state();
+          bool has_garage_lock = id(garage_lock).has_state();
+          bool has_garage_door = id(garage_door).has_state();
+
+          bool all_data_ready = has_lights && has_indoor_temp && has_power && has_guest_mode && has_garage_lock && has_garage_door;
+
+          if (id(update_start_millis) == 0 && id(display_update_pending)) {
+            id(update_start_millis) = now_ms;
+          }
+
+          const uint32_t max_wait_ms = 5000;  // allow at most 5 seconds for missing data
+          uint32_t elapsed_ms = 0;
+          bool timed_out = false;
+          if (id(update_start_millis) != 0) {
+            elapsed_ms = (now_ms >= id(update_start_millis)) ? (now_ms - id(update_start_millis)) : (UINT32_MAX - id(update_start_millis) + now_ms);
+            timed_out = elapsed_ms >= max_wait_ms;
+          }
+
+          if (!id(initial_data_loaded)) {
+            if (all_data_ready) {
+              ESP_LOGI("main", "Initial data ready; enabling display updates");
+              id(initial_data_loaded) = true;
+              id(queue_display_refresh).execute();
+              timed_out = true;  // proceed immediately
+            } else {
+              ESP_LOGD("main", "Waiting for initial data: lights=%d, indoor=%d, guest=%d, power=%d, lock=%d, door=%d",
+                       has_lights, has_indoor_temp, has_guest_mode, has_power, has_garage_lock, has_garage_door);
+              return;
+            }
+          } else if (!all_data_ready && !timed_out) {
+            ESP_LOGD("main", "Sensors still loading (elapsed=%d ms)", elapsed_ms);
+            return;
+          } else if (!all_data_ready && timed_out) {
+            ESP_LOGW("main", "Proceeding with partial data after timeout; missing sensors: lights=%d indoor=%d guest=%d power=%d lock=%d door=%d",
+                     has_lights, has_indoor_temp, has_guest_mode, has_power, has_garage_lock, has_garage_door);
+          }
+
+          if (!id(display_update_pending) && !timed_out && id(cycle_update_done)) {
+            return;
+          }
+
+          id(display_update_pending) = false;
+          id(cycle_update_done) = true;
+          ESP_LOGI("main", "Updating display (elapsed %d ms, timeout=%d)", elapsed_ms, timed_out);
+          id(epaper_display).update();
+          id(update_start_millis) = 0;
+          ESP_LOGI("main", "Update complete; scheduling deep sleep after persistence delay");
+          id(delayed_deep_sleep).execute();
+          return;
+  # Fallback: force display after 10 seconds even without all HA data (for initial boot)
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(initial_data_loaded);'
+          then:
+            - lambda: |-
+                // Force display after 10 seconds even without all HA data
+                ESP_LOGW("main", "Forcing initial update with partial data");
+                id(initial_data_loaded) = true;
+                id(update_start_millis) = millis();
+                id(queue_display_refresh).execute();
+text_sensor:
+  - platform: homeassistant
+    id: garage_lock
+    entity_id: lock.garage_lock
+    attribute: state
+  - platform: homeassistant
+    id: garage_door
+    entity_id: cover.garage_door_2
+    attribute: state
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return !id(initial_data_loaded);'
+            then:
+              - lambda: |-
+                  // If key sensors already have state, mark loaded and render
+                  // Mark as ready if we have any key data
+                  bool ready = id(lights_on).has_state() || id(indoor_temp).has_state() || id(current_power_usage).has_state() || id(guest_mode).has_state();
+                  if (ready) {
+                    id(initial_data_loaded) = true;
+                  }
+  - platform: homeassistant
+    id: current_power_usage
+    entity_id: sensor.147_123_1min
+    on_value:
+      then:
+        - lambda: |-
+            float power_value = atof(x.c_str());
+            ESP_LOGD("main", "Received power usage data: %.1f W", power_value);
+
+            auto now = id(ha_time).now();
+            int current_day = -1;
+            if (now.is_valid()) {
+              current_day = now.day_of_year;
+            }
+
+            if (!id(power_stats_initialized)) {
+              id(power_stats)[0] = power_value;
+              id(power_stats)[1] = power_value;
+              id(power_stats_day) = current_day;
+              id(power_stats_initialized) = true;
+              id(daily_power_max).publish_state(power_value);
+              id(daily_power_min).publish_state(power_value);
+              ESP_LOGI("main", "Initialized power stats from current sample: %.1f W", power_value);
+            } else {
+              // Check if it's a new day
+              if (current_day >= 0 && id(power_stats_day) != current_day) {
+                id(power_stats)[0] = power_value;
+                id(power_stats)[1] = power_value;
+                id(power_stats_day) = current_day;
+                id(daily_power_max).publish_state(power_value);
+                id(daily_power_min).publish_state(power_value);
+                ESP_LOGI("main", "Reset power stats for new day %d to %.1f W", current_day, power_value);
+              } else {
+                if (power_value > id(power_stats)[0] || id(power_stats)[0] <= 0.0f) {
+                  id(power_stats)[0] = power_value;
+                  id(daily_power_max).publish_state(power_value);
+                  ESP_LOGI("main", "New max power today: %.1f W", power_value);
+                }
+
+                if (id(power_stats)[1] < 0.0f || power_value < id(power_stats)[1]) {
+                  id(power_stats)[1] = power_value;
+                  id(daily_power_min).publish_state(power_value);
+                  ESP_LOGI("main", "New min power today: %.1f W", power_value);
+                }
+              }
+            }
+
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+
+image:
+  - file: "mac-icon.png"
+    id: mac_icon
+    type: BINARY
+    resize: 90x90
+
+display:
+  - platform: waveshare_epaper
+    id: epaper_display
+    model: 7.50inv2
+    cs_pin: GPIO44
+    dc_pin: GPIO10
+    reset_pin: GPIO38
+    busy_pin:
+      number: GPIO4
+      inverted: true
+    update_interval: never  # Updates are controlled by interval timer when all data is ready
+    lambda: |-
+      // Screen dimension constants
+      const int scr_w = 800;
+      const int scr_h = 480;
+      const int center_x = scr_w / 2;
+      const int center_y = scr_h / 2;
+
+      // Update last update timestamp
+      auto current_time = id(ha_time).now();
+      id(last_update_time) = current_time.strftime("%I:%M %p");
+
+      if (!id(initial_data_loaded)) {
+        it.printf(center_x, center_y, id(big_font), TextAlign::CENTER, "Loading...");
+        return;
+      }
+
+      // --- Top Bar ---
+      // Set battery glyph based on current level
+      float level = id(battery_level).state;
+      if (level >= 100) {
+        id(battery_glyph) = "\U000F0084"; // mdi-battery-100 (full battery)
+      } else if (level >= 90) {
+        id(battery_glyph) = "\U000F0082"; // mdi-battery-90
+      } else if (level >= 80) {
+        id(battery_glyph) = "\U000F0081"; // mdi-battery-80
+      } else if (level >= 70) {
+        id(battery_glyph) = "\U000F0080"; // mdi-battery-70
+      } else if (level >= 60) {
+        id(battery_glyph) = "\U000F007F"; // mdi-battery-60
+      } else if (level >= 50) {
+        id(battery_glyph) = "\U000F007E"; // mdi-battery-50
+      } else if (level >= 40) {
+        id(battery_glyph) = "\U000F007D"; // mdi-battery-40
+      } else if (level >= 30) {
+        id(battery_glyph) = "\U000F007C"; // mdi-battery-30
+      } else if (level >= 20) {
+        id(battery_glyph) = "\U000F007B"; // mdi-battery-20
+      } else if (level >= 10) {
+        id(battery_glyph) = "\U000F007A"; // mdi-battery-10
+      } else {
+        id(battery_glyph) = "\U000F0079"; // mdi-battery (empty)
+      }
+
+      // Top bar layout
+      const int top_bar_y = 60;
+      const int top_bar_baseline = top_bar_y;  // Shared baseline for text elements
+      const int icon_offset = -4;  // Icon glyphs need a slight upward offset to match text baseline
+
+      ESP_LOGD("main", "Battery level: %.1f%%, glyph: %s", level, id(battery_glyph).c_str());
+      it.printf(scr_w - 65, top_bar_baseline, id(small_font), TextAlign::BOTTOM_RIGHT, "%.0f%%", level);
+      it.printf(scr_w - 35, top_bar_baseline + icon_offset, id(font_bat_icon), TextAlign::BOTTOM_RIGHT, "%s", id(battery_glyph).c_str());
+      auto now = id(ha_time).now();
+      it.strftime(center_x, top_bar_baseline, id(mid_font), TextAlign::BOTTOM_CENTER, "%A, %B %d", now);
+
+      // Display Mac icon under the date (90 pixels tall)
+      it.image(center_x, top_bar_baseline + 15, id(mac_icon), ImageAlign::TOP_CENTER, COLOR_ON, COLOR_OFF);
+
+      // Alarm status in top left - using glyph - moved right by 20 pixels
+      // Simple approach: always show disarmed for now to test
+      id(alarm_status_glyph) = "\U000F033F"; // lock-open (disarmed)
+      it.printf(30, top_bar_baseline + icon_offset, id(alarm_status_font), TextAlign::BOTTOM_LEFT, "%s", id(alarm_status_glyph).c_str());
+      it.printf(60, top_bar_baseline, id(small_font), TextAlign::BOTTOM_LEFT, "Alarm");
+
+      // --- Main Content ---
+      // --- Middle Row: 4 equal sections for Outside, Inside, Lights, Doors ---
+      const int middle_row_y = center_y + 20; // Moved up by 20 pixels
+      const int section_width = scr_w / 5; // 160px per section
+      const int doors_x = section_width / 2; // Center of first section
+      const int lights_x = section_width + (section_width / 2); // Center of second section
+      const int package_x = (section_width * 2) + (section_width / 2); // Center of third section
+      const int inside_x = (section_width * 3) + (section_width / 2); // Center of fourth section
+      const int guest_x = (section_width * 4) + (section_width / 2); // Center of fifth section
+
+      // Section 1: Doors Open (left-aligned)
+      const int doors_left_x = 15; // Left margin
+      it.printf(doors_left_x, middle_row_y - 50, id(small_font), TextAlign::TOP_LEFT, "Doors Open");
+      int door_y = middle_row_y - 10;
+      int door_count = 0;
+
+      struct DoorInfo {
+        bool has_state;
+        bool is_open;
+        const char *label;
+      };
+
+      DoorInfo doors[] = {
+        {id(garage_door).has_state(), id(garage_door).has_state() && strcmp(id(garage_door).state.c_str(), "open") == 0, "Garage"},
+        {id(entry_door).has_state(), id(entry_door).has_state() && id(entry_door).state, "Entry"},
+        {id(upstairs_patio_door).has_state(), id(upstairs_patio_door).has_state() && id(upstairs_patio_door).state, "Patio"},
+        {id(inlaw_door).has_state(), id(inlaw_door).has_state() && id(inlaw_door).state, "In-law"},
+        {id(inlaw_patio_door).has_state(), id(inlaw_patio_door).has_state() && id(inlaw_patio_door).state, "In-law Patio"},
+        {id(garage_entry_door).has_state(), id(garage_entry_door).has_state() && id(garage_entry_door).state, "Garage Entry"},
+      };
+
+      ESP_LOGD("main", "Evaluating door states:");
+      for (const auto &door : doors) {
+        ESP_LOGD("main", "  %s - has_state=%d open=%d", door.label, door.has_state, door.is_open);
+        if (door.has_state && door.is_open) {
+          it.printf(doors_left_x, door_y, id(tiny_font), TextAlign::TOP_LEFT, "%s", door.label);
+          door_y += 20;
+          door_count++;
+        }
+      }
+
+      // Add garage unlocked warning to doors list
+      if (id(garage_lock).has_state() && strcmp(id(garage_lock).state.c_str(), "unlocked") == 0) {
+        it.printf(doors_left_x, door_y, id(tiny_font), TextAlign::TOP_LEFT, "Garage Unlocked");
+        door_y += 20;
+        door_count++;
+      }
+
+      if (door_count == 0) {
+        it.printf(doors_left_x, door_y, id(tiny_font), TextAlign::TOP_LEFT, "All Closed");
+      }
+
+      // Section 2: Lights On
+      it.printf(lights_x, middle_row_y - 50, id(small_font), TextAlign::TOP_CENTER, "Lights On");
+      ESP_LOGD("main", "Lights sensor - has_state: %s, state: %.0f", id(lights_on).has_state() ? "true" : "false", id(lights_on).has_state() ? id(lights_on).state : 0.0f);
+      if (id(lights_on).has_state()) {
+        ESP_LOGD("main", "Lights on: %.0f", id(lights_on).state);
+        it.printf(lights_x, middle_row_y - 10, id(mid_font), TextAlign::TOP_CENTER, "%.0f", id(lights_on).state);
+      } else {
+        ESP_LOGW("main", "Lights count sensor has no state - entity may be unavailable or not subscribed");
+        it.printf(lights_x, middle_row_y - 10, id(mid_font), TextAlign::TOP_CENTER, "--");
+      }
+
+      // Section 3: Package Status
+      const char *pkg_label = id(package_detected) ? "Detected" : "None";
+      it.printf(package_x, middle_row_y - 50, id(small_font), TextAlign::TOP_CENTER, "Packages");
+      it.printf(package_x, middle_row_y - 10, id(tiny_font), TextAlign::TOP_CENTER, "%s", pkg_label);
+
+      // Section 4: Inside
+      it.printf(inside_x, middle_row_y - 50, id(small_font), TextAlign::TOP_CENTER, "Inside");
+      ESP_LOGD("main", "Checking indoor temp - has_state: %s, state: %.1f", id(indoor_temp).has_state() ? "true" : "false", id(indoor_temp).has_state() ? id(indoor_temp).state : 0.0f);
+      if (id(indoor_temp).has_state()) {
+        ESP_LOGD("main", "Indoor temp: %.1f", id(indoor_temp).state);
+        it.printf(inside_x, middle_row_y - 10, id(mid_font), TextAlign::TOP_CENTER, "%.0f°", id(indoor_temp).state);
+      } else {
+        ESP_LOGW("main", "Indoor temp sensor has no state - entity may be unavailable or not subscribed");
+        it.printf(inside_x, middle_row_y - 10, id(mid_font), TextAlign::TOP_CENTER, "--°");
+      }
+
+      // Show "Set to" above Inside if available
+      if (id(furnace_setting).has_state()) {
+        ESP_LOGD("main", "Furnace setting: %.1f", id(furnace_setting).state);
+        it.printf(inside_x, middle_row_y - 80, id(small_font), TextAlign::TOP_CENTER, "Set to %.0f°", id(furnace_setting).state);
+      } else {
+        ESP_LOGW("main", "Furnace setting sensor has no state - entity may be unavailable");
+      }
+
+      // Section 5: Guest Mode status
+      bool guest_mode_active = id(guest_mode).has_state() && id(guest_mode).state;
+      const char *guest_icon = guest_mode_active ? "\U000F02E3" : "\U000F08A0";
+      it.printf(guest_x, middle_row_y - 108, id(guest_icon_font), TextAlign::TOP_CENTER, "%s", guest_icon);
+      it.printf(guest_x, middle_row_y - 50, id(small_font), TextAlign::TOP_CENTER, "Guest Mode");
+      it.printf(guest_x, middle_row_y - 10, id(tiny_font), TextAlign::TOP_CENTER, guest_mode_active ? "ON" : "OFF");
+
+      // --- Bottom Section: Wikipedia Trivia (Always) ---
+      const int bottom_start_y = middle_row_y + 60;
+
+      // Always show projected power cost and current usage
+      it.printf(center_x, bottom_start_y, id(small_font), TextAlign::TOP_CENTER, "Power");
+
+      bool power_has_state = id(current_power_usage).has_state();
+      float power_state = 0.0f;
+      if (power_has_state) {
+        power_state = atof(id(current_power_usage).state.c_str());
+      }
+
+      std::string segment_texts[3];
+      int segment_count = 0;
+
+      if (power_has_state) {
+        char power_str[32];
+        snprintf(power_str, sizeof(power_str), "%.0f W", power_state);
+        segment_texts[segment_count++] = power_str;
+        ESP_LOGD("main", "Power usage value for display: %s", power_str);
+      } else {
+        ESP_LOGW("main", "Power usage sensor has no state");
+      }
+
+      float stored_min = id(power_stats)[1];
+      if (stored_min >= 0.0f) {
+        char min_str[32];
+        snprintf(min_str, sizeof(min_str), "Min %.0f W", stored_min);
+        segment_texts[segment_count++] = min_str;
+      }
+
+      float stored_max = id(power_stats)[0];
+      if (stored_max > 0.0f) {
+        char max_str[32];
+        snprintf(max_str, sizeof(max_str), "Max %.0f W", stored_max);
+        segment_texts[segment_count++] = max_str;
+      }
+
+      if (segment_count > 0) {
+        const int line_y = bottom_start_y + 30;
+        int segment_widths[3] = {0, 0, 0};
+        int segment_heights[3] = {0, 0, 0};
+        int max_text_height = 0;
+        for (int i = 0; i < segment_count; i++) {
+          int x1, y1, w, h;
+          it.get_text_bounds(0, line_y, segment_texts[i].c_str(), id(power_font_small), TextAlign::TOP_LEFT, &x1, &y1, &w, &h);
+          segment_widths[i] = w;
+          segment_heights[i] = h;
+          if (h > max_text_height) {
+            max_text_height = h;
+          }
+        }
+
+        const int separator_radius = 3;
+        const int separator_diameter = separator_radius * 2;
+        const int separator_spacing = 8;
+        int separator_width = segment_count > 1 ? separator_diameter : 0;
+        int separator_height = separator_width;
+
+        int total_width = 0;
+        for (int i = 0; i < segment_count; i++) {
+          total_width += segment_widths[i];
+        }
+        if (segment_count > 1) {
+          total_width += (segment_count - 1) * (separator_width + 2 * separator_spacing);
+        }
+
+        int cursor_x = center_x - (total_width / 2);
+        for (int i = 0; i < segment_count; i++) {
+          it.printf(cursor_x, line_y, id(power_font_small), TextAlign::TOP_LEFT, "%s", segment_texts[i].c_str());
+          cursor_x += segment_widths[i];
+          if (i < segment_count - 1) {
+            cursor_x += separator_spacing;
+            int separator_center_y = line_y + (max_text_height / 2);
+            int separator_center_x = cursor_x + separator_radius;
+            it.filled_circle(separator_center_x, separator_center_y, separator_radius);
+            cursor_x += separator_width + separator_spacing;
+          }
+        }
+      } else {
+        it.printf(center_x, bottom_start_y + 30, id(tiny_font), TextAlign::TOP_CENTER, "Waiting for power data...");
+      }
+
+      // --- Last Updated Timestamp ---
+      it.printf(30, scr_h - 30, id(tiny_font), TextAlign::BOTTOM_LEFT, "Updated: %s", id(last_update_time).c_str());
