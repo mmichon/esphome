@@ -1,0 +1,55 @@
+esp32:
+  board: lolin32
+  framework:
+    type: arduino
+
+substitutions:
+  location: Kitchen
+  hostname: espresso
+
+esphome:
+  name: ${hostname}
+  friendly_name: Espresso Water Detector
+  on_boot:
+    then:
+      - wait_until:
+          condition:
+            mqtt.connected:
+          timeout: 8s
+      - delay: 2s # delay to let it upload
+      - logger.log: "Booted and MQTT uploaded. Setting done pin."
+      - switch.turn_on: sleep_pin
+      # Resistor-time mappings: https://www.ti.com/lit/ds/symlink/tpl5110.pdf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  manual_ip:
+    static_ip: 10.0.0.124
+    gateway: 10.0.0.1
+    subnet: 255.255.255.0
+mqtt:
+  broker: "10.0.0.2"
+  discovery: False
+  discovery_retain: False
+ota:
+  platform: esphome
+
+switch:
+  - platform: gpio
+    restore_mode: ALWAYS_OFF
+    pin:
+      number: GPIO32
+    id: sleep_pin
+    internal: true
+    name: "Sleep Pin"
+
+binary_sensor:
+  # XKC-Y23 water level sensor
+  - platform: gpio
+    pin: GPIO12 # GPIO9 pin 12
+    name: "Espresso Machine Water Level Low"
+    id: espresso_machine_water_level_low
+    filters:
+      - invert:
