@@ -1,0 +1,159 @@
+substitutions:
+  hostname: espgarage
+
+esphome:
+  name: ${hostname}
+  platform: ESP32
+  board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
+  on_boot:
+    priority: 600
+    then:
+      - lock.unlock: garage_lock
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+captive_portal:
+
+logger:
+ota:
+    platform: esphome
+web_server:
+
+status_led:
+  pin:
+    number: GPIO2
+    inverted: true
+
+sensor:
+  # - platform: wifi_signal
+  #   name: Door Controller WiFi Strength
+  #   update_interval: 60s
+  # - platform: uptime
+  #   name: Door Controller Uptime
+  # - platform: ultrasonic
+  #   trigger_pin: D2
+  #   echo_pin: D1
+  #   name: "Car Ultrasonic Sensor"
+
+binary_sensor:
+  - platform: gpio
+    id: garage_contact_sensor
+    #pin: 12
+    pin:
+      number: 12 #D12
+      inverted: True
+      mode: INPUT_PULLUP
+    internal: false
+  # - platform: gpio
+  #   name: "Gate Contact Switch"
+  #   device_class: door
+  #   pin:
+  #     number: 14
+  #     inverted: False
+  #     mode: INPUT_PULLUP
+
+api:
+  services:
+    - service: long_gate_open
+      then:
+        - switch.turn_on: gate_buzzer
+        - delay: 8s
+        - switch.turn_off: gate_buzzer
+    - service: short_gate_open
+      then:
+        - switch.turn_on: gate_buzzer
+        - delay: 4s
+        - switch.turn_off: gate_buzzer
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
+  - platform: gpio
+    pin: 18 #D18
+    restore_mode: ALWAYS_OFF
+    id: garage_button_relay
+    internal: true
+    on_turn_on:
+      - delay: 500ms
+      - switch.turn_off: garage_button_relay
+
+  - platform: gpio
+    pin: 4 #D4
+    restore_mode: ALWAYS_OFF
+    name: "Gate Buzzer"
+    id: gate_buzzer
+    # internal: true
+    on_turn_on:
+      - delay: 8s
+      - switch.turn_off: gate_buzzer
+
+  # - platform: template
+  #   name: "Gate Buzzer"
+  #   id: gate_buzzer
+  #   lambda: |-
+  #     return false;
+  #   turn_on_action:
+  #     - switch.turn_on: gate_buzzer_relay
+  #     # - delay: 4s
+  #     # - switch.turn_off: gate_buzzer_relay
+  #   turn_off_action:
+  #     - switch.turn_off: gate_buzzer_relay
+
+  - platform: gpio
+    pin: 19
+    interlock: &interlock [extend_lock, retract_lock]
+    id: extend_lock
+    restore_mode: ALWAYS_OFF
+  - platform: gpio
+    pin: 5
+    interlock: *interlock
+    id: retract_lock
+    restore_mode: ALWAYS_OFF
+
+cover:
+  - platform: template
+    name: "Garage Door"
+    device_class: garage
+    optimistic: true
+    lambda: |-
+      if (id(garage_contact_sensor).state) {
+        return COVER_OPEN;
+      } else {
+        return COVER_CLOSED;
+      }
+    # chatgpt used for the below logic
+    open_action:
+      - if:
+          condition:
+            lock.is_unlocked: garage_lock
+          then:
+            - switch.turn_on: garage_button_relay
+            - delay: 0.5s
+            - switch.turn_off: garage_button_relay
+    close_action:
+      - if:
+          condition:
+            lock.is_unlocked: garage_lock
+          then:
+            - switch.turn_on: garage_button_relay
+            - delay: 0.5s
+            - switch.turn_off: garage_button_relay
+
+lock:
+  - platform: template
+    name: "Garage Lock"
+    id: garage_lock
+    optimistic: true
+    disabled_by_default: true
+    lock_action:
+      - switch.turn_on: extend_lock
+      - delay: 1sec
+      - switch.turn_off: extend_lock
+
+    unlock_action:
+      - switch.turn_on: retract_lock
+      - delay: 2sec
+      - switch.turn_off: retract_lock

@@ -1,0 +1,241 @@
+
+external_components:
+  - source: github://TillFleisch/ESPHome-HLK-LD2450@main
+
+substitutions:
+  hostname: espmove
+
+esphome:
+  name: ${hostname}
+  platform: ESP8266
+  board: d1_mini # pinout https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+# logger:
+#   level: DEBUG
+ota:
+  - platform: esphome
+web_server:
+
+uart:
+  id: uart_bus
+  rx_pin: 
+    number: GPIO3
+    mode:
+      input: true
+      pullup: true
+  tx_pin: 
+    number: GPIO1
+    mode:
+      input: true
+      pullup: true
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+  data_bits: 8
+
+status_led:
+  pin:
+    number: 10
+    inverted: true
+
+  # - id: buzzer_output
+  #   platform: gpio
+  #   pin: D2
+
+### running fault logic
+# if t1.speed > 0 || t2.speed > 0 || t3.speed > 0
+#   if red_light.on
+#     buzzer.turn_on (number_beeps=target.number)
+
+### winner logic
+# if reset_switch.pressed
+#   flash_leds()
+#   sound_buzzer()
+#   randomize()
+#   restart_timer
+
+LD2450:
+  uart_id: uart_bus
+  flip_x_axis: true
+  fast_off_detection: true
+  max_detection_tilt_angle:
+    name: "Max Tilt Angle"
+    initial_value: 90°
+  min_detection_tilt_angle:
+    name: "Min Tilt Angle"
+    initial_value: -90°
+  max_detection_distance:
+    name: "Max Distance"
+    initial_value: 6m
+  max_distance_margin: 30cm
+  
+  restart_button:
+    name: "Restart Sensor"
+  factory_reset_button:
+    name: "Factory Reset Sensor"
+
+  tracking_mode_switch:
+    name: "Multiple Target Tracking"
+
+  baud_rate_select:
+    name: "Sensor Baud Rate"
+
+  occupancy:
+    name: Occupancy
+  target_count:
+    name: Target Count
+
+  targets:
+    - target:
+        id: t1
+        # x_position:
+        #     id: t1_xpos
+        # y_position:
+        #     id: t1_ypos
+        speed:
+            id: t1_speed
+            on_value_range:
+              - above: 0.1
+                then:
+                  - script.execute: check_light_and_control_buzzer
+        # distance_resolution:
+        #     id: t1_res
+        # angle:
+        #     id: t1_angle
+        # distance:
+        #     id: t1_distance
+    - target:
+        id: t2
+        # x_position:
+        #     id: t2_xpos
+        # y_position:
+        #     id: t2_ypos
+        speed:
+            id: t2_speed
+            on_value_range:
+            - above: 0.1
+              then:
+                - script.execute: check_light_and_control_buzzer
+
+        # distance_resolution:
+        #     id: t2_res
+        # angle:
+        #     id: t2_angle
+        # distance:
+        #     id: t2_distance
+    - target:
+        id: t3
+        # x_position:
+        #     id: t3_xpos
+        # y_position:
+        #     id: t3_ypos
+        speed:
+            id: t3_speed
+            on_value_range:
+            - above: 0.1
+              then:
+                - script.execute: check_light_and_control_buzzer
+
+        # distance_resolution:
+        #     id: t3_res
+        # angle:
+        #     id: t3_angle
+        # distance:
+        #     id: t3_distance
+
+script:
+  - id: check_light_and_control_buzzer
+    then:
+      - if:
+          condition:
+            light.is_on: green_led
+          then:
+            - output.turn_off: red_led_output
+            # - output.turn_off: buzzer
+          else:
+            - output.turn_on: red_led_output
+            # - if:
+            #   condition:
+                # t1.t1_speed > .1
+            - script.execute: 
+                id: sound_buzzer
+                frequency: 200
+                times: 1
+
+  - id: sound_buzzer
+    parameters:
+      frequency: int
+      times: int
+    then:
+      - output.turn_on: buzzer
+      - output.esp8266_pwm.set_frequency:
+          id: buzzer
+          frequency: !lambda return frequency;
+      - output.set_level:
+          id: buzzer
+          level: 50%
+      - delay: 250ms
+      - output.turn_off: buzzer
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
+# button:
+#   - platform: template
+#     name: "Buzzer"
+#     id: buzzer_switch
+#     icon: "mdi:bullhorn-outline"
+#     on_press:
+#       then:
+#         - output.turn_on: buzzer
+#         - output.set_level:
+#             id: buzzer
+#             level: 50%
+#         - delay: 1s
+#         - output.turn_off: buzzer
+
+output:
+  - id: green_led_output
+    platform: gpio
+    pin: D6
+  - id: red_led_output
+    platform: gpio
+    pin: D5
+  # - id: buzzer
+  #   platform: gpio
+  #   pin: D2
+  - id: buzzer
+    platform: esp8266_pwm
+    pin: D2
+    frequency: 1000Hz
+    inverted: false
+
+# button:
+#   name: "Restart Game"
+  # - on_press:
+    # 
+
+light:
+  - platform: binary
+    id: green_led
+    output: green_led_output
+    name: "Green Light"
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on: 
+      then:
+        - light.turn_off: red_led # restart the round
+        - script.execute: 
+            id: sound_buzzer
+            frequency: 1000
+            times: 3
+  - platform: binary
+    id: red_led
+    output: red_led_output
+    name: "Red Light" 

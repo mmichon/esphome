@@ -1,0 +1,34 @@
+substitutions:
+  hostname: espbedroom
+
+esphome:
+  name: ${hostname}
+  platform: ESP8266
+  board: d1_mini # pinout https://m.media-amazon.com/images/I/71d6+P4PUzL._SL1067_.jpg
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+logger:
+ota:
+web_server:
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
+sensor:
+  # DHT11
+  - platform: dht
+    pin: D4
+    temperature:
+      name: "Bedroom Temperature"
+      id: bedroom_temp
+      filters:
+        - offset: -1.4 # -2.5ºF
+    humidity:
+      name: "Bedroom Humidity"
+    update_interval: 60s
