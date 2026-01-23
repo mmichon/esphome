@@ -1,0 +1,10 @@
+# ESP32-S3 Custom Partition Table for trmnl (4MB flash)
+# Increased NVS size to 48KB (0xC000) to fix ESP_ERR_NVS_NOT_ENOUGH_SPACE errors
+# Factory partition aligned to 0x20000 (128KB) boundary as required by ESP-IDF
+# Name,   Type,    SubType, Offset,  Size,     Flags
+nvs,      data,    nvs,     0x9000,  0xC000,
+otadata,  data,    ota,     0x15000, 0x2000,
+phy_init, data,    phy,     0x17000, 0x9000,
+factory,  app,     factory, 0x20000, 0x180000,
+ota_0,    app,     ota_0,   0x1A0000, 0x180000,
+ota_1,    app,     ota_1,   0x320000, 0xE0000,
