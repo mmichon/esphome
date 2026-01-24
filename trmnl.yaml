@@ -49,14 +49,6 @@ esphome:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.garage_entry_contact
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: sensor.147_123_1min
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: sensor.estimated_monthly_cost
       # Calendar events and banner text removed from boot fetch - use cached values
       # These update automatically via Home Assistant API when they change, saving 3 API calls per wake
       - homeassistant.service:
@@ -151,10 +143,6 @@ font:
     size: 30
     glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~•"
   - file: "fonts/GoogleSans-Bold.ttf"
-    id: power_font
-    size: 30
-    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~•"
-  - file: "fonts/GoogleSans-Bold.ttf"
     id: big_font
     size: 135
     glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~•"
@@ -198,12 +186,11 @@ font:
       - "\U000F033E" # lock (armed)
       - "\U000F033F" # lock-open (disarmed)
       - "\U000F002F" # alert (unknown/error)
-  - file: "fonts/materialdesignicons-webfont.ttf"
+  - file: "fonts/MaterialIcons-Regular.ttf"
     id: guest_icon_font
     size: 104
     glyphs:
-      - "\U000F05B1" # luggage (guest mode - alternative suitcase icon)
-      - "\U000F05B0" # suitcase (guest mode)
+      - "\U0000e16b" # weekend (overnight guest mode) - Google Material Icons
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: package_icon_font
     size: 96
@@ -223,6 +210,7 @@ font:
       - "\U000F11B8" # door-open (open door)
       - "\U000F0335" # lightbulb
       - "\U000F024A" # flower (plant)
+      - "\U000F0083" # battery-alert
 
 globals:
   - id: battery_glyph
@@ -234,18 +222,6 @@ globals:
     restore_value: no
     initial_value: R"(\U000F002F)"  # alert (unknown)
   - id: initial_data_loaded
-    type: bool
-    restore_value: no
-    initial_value: "false"
-  - id: power_stats
-    type: float[2]
-    restore_value: no
-    initial_value: "{0.0f, -1.0f}"
-  - id: power_stats_day
-    type: int
-    restore_value: no
-    initial_value: "-1"
-  - id: power_stats_initialized
     type: bool
     restore_value: no
     initial_value: "false"
@@ -269,10 +245,6 @@ globals:
     type: std::string
     restore_value: no
     initial_value: ""
-  - id: peak_power_time
-    type: std::string
-    restore_value: no
-    initial_value: ""
   - id: sensor_retry_count
     type: int
     restore_value: no
@@ -281,14 +253,6 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
-  - id: last_known_power
-    type: float
-    restore_value: yes
-    initial_value: "NAN"
-  - id: last_known_cost
-    type: float
-    restore_value: yes
-    initial_value: "NAN"
   - id: last_known_lights
     type: float
     restore_value: yes
@@ -356,14 +320,6 @@ script:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.garage_entry_contact
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: sensor.147_123_1min
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: sensor.estimated_monthly_cost
       # Calendar events and banner text removed from retry fetch - use cached values
       # These update automatically via Home Assistant API when they change, saving 3 API calls per retry
       - homeassistant.service:
@@ -518,31 +474,6 @@ sensor:
             if (id(initial_data_loaded)) {
               id(queue_display_refresh).execute();
             }
-  - platform: template
-    name: "Daily Power Min"
-    id: daily_power_min
-    unit_of_measurement: "W"
-    accuracy_decimals: 1
-    state_class: measurement
-    lambda: |-
-      if (id(power_stats)[1] < 0.0f) {
-        return NAN;
-      }
-      return id(power_stats)[1];
-    update_interval: never
-  - platform: template
-    name: "Daily Power Max"
-    id: daily_power_max
-    unit_of_measurement: "W"
-    accuracy_decimals: 1
-    state_class: measurement
-    lambda: |-
-      if (id(power_stats)[0] <= 0.0f) {
-        return NAN;
-      }
-      return id(power_stats)[0];
-    update_interval: never
-
 output:
   - platform: gpio
     pin: GPIO6
@@ -635,12 +566,11 @@ interval:
           const uint32_t now_ms = millis();
           bool has_lights = id(lights_on).has_state();
           bool has_indoor_temp = id(indoor_temp).has_state();
-          bool has_power = id(current_power_usage).has_state();
           bool has_guest_mode = id(guest_mode).has_state();
           bool has_garage_lock = id(garage_lock).has_state();
           bool has_garage_door = id(garage_door).has_state();
 
-          bool all_data_ready = has_lights && has_indoor_temp && has_power && has_guest_mode && has_garage_lock && has_garage_door;
+          bool all_data_ready = has_lights && has_indoor_temp && has_guest_mode && has_garage_lock && has_garage_door;
 
           if (id(update_start_millis) == 0 && id(display_update_pending)) {
             id(update_start_millis) = now_ms;
@@ -767,97 +697,10 @@ text_sensor:
               - lambda: |-
                   // If key sensors already have state, mark loaded and render
                   // Mark as ready if we have any key data
-                  bool ready = id(lights_on).has_state() || id(indoor_temp).has_state() || id(current_power_usage).has_state() || id(guest_mode).has_state();
+                  bool ready = id(lights_on).has_state() || id(indoor_temp).has_state() || id(guest_mode).has_state();
                   if (ready) {
                     id(initial_data_loaded) = true;
                   }
-  - platform: homeassistant
-    id: current_power_usage
-    entity_id: sensor.147_123_1min
-    on_value:
-      then:
-        - lambda: |-
-            // Check for unavailable or empty values - don't overwrite last known good value
-            if (x.empty() || x == "unavailable" || x == "unknown") {
-              return;  // Skip processing unavailable values
-            }
-
-            float power_value = atof(x.c_str());
-
-            // Only update last known value if we got a valid number (not 0.0 from failed parse)
-            if (!isnan(power_value) && power_value >= 0.0f) {
-              id(last_known_power) = power_value;
-            } else {
-              return;  // Invalid value, don't process
-            }
-
-            auto now = id(ha_time).now();
-            int current_day = -1;
-            if (now.is_valid()) {
-              current_day = now.day_of_year;
-            }
-
-            if (!id(power_stats_initialized)) {
-              id(power_stats)[0] = power_value;
-              id(power_stats)[1] = power_value;
-              id(power_stats_day) = current_day;
-              id(power_stats_initialized) = true;
-              id(daily_power_max).publish_state(power_value);
-              id(daily_power_min).publish_state(power_value);
-              if (now.is_valid()) {
-                id(peak_power_time) = now.strftime("%I:%M %p");
-              }
-            } else {
-              // Check if it's a new day
-              if (current_day >= 0 && id(power_stats_day) != current_day) {
-                id(power_stats)[0] = power_value;
-                id(power_stats)[1] = power_value;
-                id(power_stats_day) = current_day;
-                id(daily_power_max).publish_state(power_value);
-                id(daily_power_min).publish_state(power_value);
-                if (now.is_valid()) {
-                  id(peak_power_time) = now.strftime("%I:%M %p");
-                }
-              } else {
-                if (power_value > id(power_stats)[0] || id(power_stats)[0] <= 0.0f) {
-                  id(power_stats)[0] = power_value;
-                  id(daily_power_max).publish_state(power_value);
-                  if (now.is_valid()) {
-                    id(peak_power_time) = now.strftime("%I:%M %p");
-                  }
-                }
-
-                if (id(power_stats)[1] < 0.0f || power_value < id(power_stats)[1]) {
-                  id(power_stats)[1] = power_value;
-                  id(daily_power_min).publish_state(power_value);
-                }
-              }
-            }
-
-            if (id(initial_data_loaded)) {
-              id(queue_display_refresh).execute();
-            }
-  - platform: homeassistant
-    id: estimated_monthly_cost
-    entity_id: sensor.estimated_monthly_cost
-    on_value:
-      then:
-        - lambda: |-
-            // Check for unavailable or empty values - don't overwrite last known good value
-            if (x.empty() || x == "unavailable" || x == "unknown") {
-              return;  // Skip processing unavailable values
-            }
-
-            float cost_value = atof(x.c_str());
-
-            // Only update last known value if we got a valid number
-            if (!isnan(cost_value) && cost_value >= 0.0f) {
-              id(last_known_cost) = cost_value;
-            }
-
-            if (id(initial_data_loaded)) {
-              id(queue_display_refresh).execute();
-            }
   - platform: homeassistant
     id: next_calendar_event_time
     entity_id: sensor.next_calendar_event_time
@@ -1109,59 +952,6 @@ display:
       it.printf(center_x, current_y, id(status_font), TextAlign::TOP_CENTER, "%s", status_text.c_str());
       current_y += 70; // Move down for next row (increased spacing)
 
-      // --- Row 4: Power consumption and monthly estimate (power font) ---
-      std::string power_text;
-
-      // Get current power value or fall back to last known value
-      float power_value = NAN;
-      if (id(current_power_usage).has_state()) {
-        std::string power_str = id(current_power_usage).state;
-        if (!power_str.empty() && power_str != "unavailable" && power_str != "unknown") {
-          power_value = atof(power_str.c_str());
-        }
-      }
-      // Fall back to last known value if current is unavailable
-      if (isnan(power_value) && !isnan(id(last_known_power))) {
-        power_value = id(last_known_power);
-      }
-
-      // Get current cost value or fall back to last known value
-      float cost_value = NAN;
-      if (id(estimated_monthly_cost).has_state()) {
-        std::string cost_str = id(estimated_monthly_cost).state;
-        if (!cost_str.empty() && cost_str != "unavailable" && cost_str != "unknown") {
-          cost_value = atof(cost_str.c_str());
-        }
-      }
-      // Fall back to last known value if current is unavailable
-      if (isnan(cost_value) && !isnan(id(last_known_cost))) {
-        cost_value = id(last_known_cost);
-      }
-
-      if (!isnan(power_value) && !isnan(cost_value)) {
-        float rounded_cost = roundf(cost_value * 100.0f) / 100.0f;
-        char power_buf[64];
-        if (power_value == 0.0f) {
-          snprintf(power_buf, sizeof(power_buf), "$%.2f", rounded_cost);
-        } else {
-          snprintf(power_buf, sizeof(power_buf), "%.0f W • $%.2f", power_value, rounded_cost);
-        }
-        power_text = power_buf;
-      } else if (!isnan(power_value)) {
-        if (power_value == 0.0f) {
-          power_text = "";
-        } else {
-          char power_buf[32];
-          snprintf(power_buf, sizeof(power_buf), "%.0f W", power_value);
-          power_text = power_buf;
-        }
-      } else {
-        power_text = "Waiting for power data...";
-      }
-
-      it.printf(center_x, current_y - 10, id(power_font), TextAlign::TOP_CENTER, "%s", power_text.c_str());
-      current_y += 50; // Move down for next row (reduced by 10 pixels)
-
       // --- Row 5: Icons for guest mode, packages, trash night, alarm, lights, doors (medium font/icons) ---
       // Count how many icons will be displayed
       int icon_count = 0;
@@ -1172,6 +962,7 @@ display:
       bool show_lights;
       bool show_door;
       bool show_plant;
+      bool show_battery_alert;
 
       // Check if it's Wednesday (trash night)
       bool is_wednesday = false;
@@ -1194,7 +985,8 @@ display:
         show_lights = true;
         show_door = true;
         show_plant = true;
-        icon_count = 7; // All 7 icons: guest, package, trash, alarm, lights, door, plant
+        show_battery_alert = true;
+        icon_count = 8; // All 8 icons: guest, package, trash, alarm, lights, door, plant, battery_alert
       } else {
         // Normal mode: conditional display using cached sensor states
         // Guest mode icon - only show if guest_mode boolean is true
@@ -1237,6 +1029,12 @@ display:
         if (show_plant) {
           icon_count++;
         }
+
+        // Battery alert icon - show if battery level is less than 20%
+        show_battery_alert = !isnan(level) && level < 20.0f;
+        if (show_battery_alert) {
+          icon_count++;
+        }
       }
 
       // Calculate centered positions based on icon count
@@ -1247,9 +1045,9 @@ display:
       int current_icon_x = start_x;
       int icon_y = current_y - 10; // Move icons up by 10 pixels
 
-      // Guest mode icon - only show if guest_mode boolean is true (bitmap)
+      // Guest mode icon - only show if guest_mode boolean is true
       if (show_guest) {
-        it.image(current_icon_x - 52, icon_y, id(guest_mode_icon)); // Center 104x104 icon
+        it.printf(current_icon_x, icon_y + 52, id(guest_icon_font), TextAlign::CENTER, "\U0000e16b"); // weekend
         current_icon_x += icon_spacing;
       }
 
@@ -1301,6 +1099,12 @@ display:
       // Plant icon - show if any plants are dry
       if (show_plant) {
         it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F024A"); // flower (plant)
+        current_icon_x += icon_spacing;
+      }
+
+      // Battery alert icon - show if battery level is less than 20%
+      if (show_battery_alert) {
+        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F0083"); // battery-alert
         current_icon_x += icon_spacing;
       }
 
