@@ -191,26 +191,30 @@ font:
     size: 104
     glyphs:
       - "\U0000e16b" # weekend (overnight guest mode) - Google Material Icons
-  - file: "fonts/materialdesignicons-webfont.ttf"
+  - file: "fonts/MaterialSymbolsOutlined.ttf"
     id: package_icon_font
-    size: 96
+    size: 104
     glyphs:
-      - "\U000F03D3" # package / parcel (package detected)
-  - file: "fonts/materialdesignicons-webfont.ttf"
+      - "\U0000f569" # package_2 (package detected) - Material Symbols
+  - file: "fonts/MaterialIcons-Regular.ttf"
     id: trash_icon_font
-    size: 96
+    size: 104
     glyphs:
-      - "\U000F0A79" # delete / trash bin (trash night)
-  - file: "fonts/materialdesignicons-webfont.ttf"
+      - "\U0000ea4c" # auto_delete (trash night) - Google Material Icons
+  - file: "fonts/MaterialSymbolsOutlined.ttf"
     id: alarm_icon_font
     size: 104
     glyphs:
-      - "\U000F033E" # lock (armed)
-      - "\U000F033F" # lock-open (disarmed)
-      - "\U000F11B8" # door-open (open door)
-      - "\U000F0335" # lightbulb
-      - "\U000F024A" # flower (plant)
-      - "\U000F0083" # battery-alert
+      - "\U0000e899" # lock (alarm armed) - Material Symbols
+      - "\U0000e898" # lock_open (disarmed) - Material Symbols
+      - "\U0000e77c" # door_open (open door) - Material Symbols
+      - "\U0000e90f" # lightbulb - Material Symbols
+      - "\U0000e19c" # battery_alert - Material Symbols
+  - file: "fonts/MaterialSymbolsOutlined.ttf"
+    id: plant_icon_font
+    size: 104
+    glyphs:
+      - "\U0000f8aa" # potted_plant (dry plant) - Material Symbols
 
 globals:
   - id: battery_glyph
@@ -739,18 +743,6 @@ text_sensor:
               id(queue_display_refresh).execute();
             }
 
-image:
-  - file: "icons/guest_mode_icon.png"
-    id: guest_mode_icon
-    type: BINARY
-  - file: "icons/package_icon.png"
-    id: package_icon
-    type: BINARY
-  - file: "icons/trash_icon.png"
-    id: trash_icon
-    type: BINARY
-#     resize: 90x90
-
 display:
   - platform: waveshare_epaper
     id: epaper_display
@@ -1051,15 +1043,15 @@ display:
         current_icon_x += icon_spacing;
       }
 
-      // Package icon (cardboard box) - only show if packages detected (bitmap)
+      // Package icon - only show if packages detected
       if (show_package) {
-        it.image(current_icon_x - 52, icon_y, id(package_icon)); // Center 104x104 icon
+        it.printf(current_icon_x, icon_y + 52, id(package_icon_font), TextAlign::CENTER, "\U0000f569"); // package_2
         current_icon_x += icon_spacing;
       }
 
-      // Trash night icon - show on Wednesdays (bitmap)
+      // Trash night icon - show on Wednesdays
       if (show_trash) {
-        it.image(current_icon_x - 52, icon_y, id(trash_icon)); // Center 104x104 icon
+        it.printf(current_icon_x, icon_y + 52, id(trash_icon_font), TextAlign::CENTER, "\U0000ea4c"); // auto_delete
         current_icon_x += icon_spacing;
       }
 
@@ -1068,17 +1060,17 @@ display:
         const char *alarm_icon;
         if (debug_mode_enabled) {
           // Debug mode: show lock icon (armed)
-          alarm_icon = "\U000F033E";
+          alarm_icon = "\U0000e899";
         } else if (id(alarm_state).has_state()) {
           alarm_icon = (strcmp(id(alarm_state).state.c_str(), "armed_away") == 0 ||
                         strcmp(id(alarm_state).state.c_str(), "armed_home") == 0 ||
                         strcmp(id(alarm_state).state.c_str(), "armed_night") == 0 ||
                         strcmp(id(alarm_state).state.c_str(), "armed_vacation") == 0 ||
                         strcmp(id(alarm_state).state.c_str(), "armed_custom_bypass") == 0)
-                        ? "\U000F033E" : "\U000F033F"; // lock if armed, lock-open if disarmed
+                        ? "\U0000e899" : "\U0000e898"; // lock if armed, lock_open if disarmed
         } else {
-          // Fallback: show lock-open icon if no state
-          alarm_icon = "\U000F033F";
+          // Fallback: show lock_open icon if no state
+          alarm_icon = "\U0000e898";
         }
         it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "%s", alarm_icon);
         current_icon_x += icon_spacing;
@@ -1086,25 +1078,25 @@ display:
 
       // Light bulb icon - show if at least 1 light is on
       if (show_lights) {
-        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F0335"); // lightbulb
+        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U0000e90f"); // lightbulb
         current_icon_x += icon_spacing;
       }
 
       // Open door icon - show if at least one door or window is open
       if (show_door) {
-        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F11B8"); // door-open
+        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U0000e77c"); // door_open
         current_icon_x += icon_spacing;
       }
 
       // Plant icon - show if any plants are dry
       if (show_plant) {
-        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F024A"); // flower (plant)
+        it.printf(current_icon_x, icon_y + 52, id(plant_icon_font), TextAlign::CENTER, "\U0000f8aa"); // potted_plant
         current_icon_x += icon_spacing;
       }
 
       // Battery alert icon - show if battery level is less than 20%
       if (show_battery_alert) {
-        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U000F0083"); // battery-alert
+        it.printf(current_icon_x, icon_y + 52, id(alarm_icon_font), TextAlign::CENTER, "\U0000e19c"); // battery_alert
         current_icon_x += icon_spacing;
       }
 

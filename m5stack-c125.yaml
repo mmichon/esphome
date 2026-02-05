@@ -1,0 +1,339 @@
+# =============================================================================
+# M5Stack NanoC6 (ESP32-C6) - Desk Controller Configuration
+# =============================================================================
+#
+# GPIO Pin Mappings:
+# ------------------
+# GPIO1  : Desk Down Button (output to desk controller)
+# GPIO2  : Desk Up Button (output to desk controller)
+# GPIO9  : Hardware Button (input, toggles desk raised/lowered position)
+# GPIO19 : RGB LED Power Enable (output)
+# GPIO20 : WS2812 RGB LED Data (output)
+#
+# RGB LED Status Indicators:
+# --------------------------
+# Blue (solid)     : Booting up before first Home Assistant contact
+# Green (solid)    : Normal operation, desk at rest, connected to Home Assistant
+# Yellow (flash)   : Desk movement in progress
+# Orange (solid)   : Occupancy sensor problem (unavailable or not detected)
+# Red (solid)      : Network/Home Assistant connection issue
+#
+# Hardware Button Behavior:
+# -------------------------
+# Single press: Toggle desk between raised and lowered positions
+# - Respects occupancy sensor checks before moving
+# - LED provides visual feedback for status and errors
+#
+# =============================================================================
+
+substitutions:
+  hostname: "desk-c125"
+
+esphome:
+  name: ${hostname}
+  friendly_name: Desk Controller
+  build_path: /Users/mmichon/.esphome/build/${hostname}
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: rgb_led
+          red: 0%
+          green: 0%
+          blue: 100%
+          brightness: 100%
+          transition_length: 0.2s
+      - delay: 5s
+      - if:
+          condition:
+            api.connected:
+          then:
+            - light.turn_on:
+                id: rgb_led
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 100%
+                transition_length: 0.2s
+          else:
+            - light.turn_on:
+                id: rgb_led
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: 100%
+                transition_length: 0.2s
+
+esp32:
+  variant: esp32c6
+  board: esp32-c6-devkitc-1
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  reboot_timeout: 15min
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_connected:
+    - light.turn_on:
+        id: rgb_led
+        red: 0%
+        green: 100%
+        blue: 0%
+        brightness: 100%
+        transition_length: 0.2s
+  on_client_disconnected:
+    - light.turn_on:
+        id: rgb_led
+        red: 100%
+        green: 0%
+        blue: 0%
+        brightness: 100%
+        transition_length: 0.2s
+
+captive_portal:
+
+logger:
+
+ota:
+  - platform: esphome
+
+web_server:
+
+output:
+  - platform: gpio
+    pin: GPIO19
+    id: rgb_power
+    inverted: false
+
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO20
+    num_leds: 1
+    chipset: WS2812
+    name: "RGB LED"
+    id: rgb_led
+    internal: true
+    effects:
+      - strobe:
+          name: "Movement Strobe"
+          colors:
+            - red: 100%
+              green: 0%
+              blue: 0%
+              duration: 250ms
+            - red: 0%
+              green: 0%
+              blue: 100%
+              duration: 250ms
+    on_turn_on:
+      - output.turn_on: rgb_power
+    on_turn_off:
+      - output.turn_off: rgb_power
+
+binary_sensor:
+  - platform: gpio
+    name: "Button"
+    pin:
+      number: GPIO9
+      mode: INPUT_PULLUP
+      inverted: true
+    on_press:
+      - switch.toggle: desk_raised
+
+  - platform: homeassistant
+    entity_id: binary_sensor.in_law_occupancy
+    id: desk_occupancy
+    internal: true
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
+  - platform: gpio
+    id: desk_up_button
+    pin: GPIO2
+    restore_mode: ALWAYS_OFF
+    internal: true
+    interlock: &desk_buttons [desk_up_button, desk_down_button]
+
+  - platform: gpio
+    id: desk_down_button
+    pin: GPIO1
+    restore_mode: ALWAYS_OFF
+    internal: true
+    interlock: *desk_buttons
+
+  - platform: template
+    name: "Desk Raised"
+    id: desk_raised
+    icon: "mdi:desk"
+    optimistic: true
+    restore_mode: DISABLED
+    turn_on_action:
+      - script.execute: raise_desk_script
+    turn_off_action:
+      - script.execute: lower_desk_script
+
+cover:
+  - platform: template
+    name: "Desk Height"
+    id: desk_cover
+    optimistic: true
+    assumed_state: true
+    open_action:
+      - switch.turn_on: desk_raised
+    close_action:
+      - switch.turn_off: desk_raised
+    stop_action:
+      - script.stop: raise_desk_script
+      - script.stop: lower_desk_script
+      - switch.turn_off: desk_up_button
+      - switch.turn_off: desk_down_button
+      - light.turn_on:
+          id: rgb_led
+          effect: "None"
+      - light.turn_on:
+          id: rgb_led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 100%
+          transition_length: 0.2s
+
+globals:
+  - id: last_notification_millis
+    type: unsigned long
+    restore_value: false
+    initial_value: '0'
+
+script:
+  - id: notify_desk_error_unavailable
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.service:
+                service: notify.all_mike_devices
+                data:
+                  message: "‼️ Unable to set desk height because in-law occupancy sensor is unavailable."
+
+  - id: notify_desk_error_no_occupancy
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.service:
+                service: notify.all_mike_devices
+                data:
+                  message: "‼️ Unable to set desk height because in-law occupancy is not detected."
+
+  - id: show_error_led
+    then:
+      - light.turn_on:
+          id: rgb_led
+          red: 100%
+          green: 50%
+          blue: 0%
+          brightness: 100%
+          transition_length: 0.2s
+      - delay: 3s
+      - light.turn_on:
+          id: rgb_led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 100%
+          transition_length: 0.2s
+
+  - id: raise_desk_script
+    mode: restart
+    then:
+      - script.stop: lower_desk_script
+      - if:
+          condition:
+            lambda: 'return id(desk_occupancy).has_state() && id(desk_occupancy).state;'
+          then:
+            - logger.log: "Raising desk (occupancy detected)..."
+            - light.turn_on:
+                id: rgb_led
+                effect: "Movement Strobe"
+            - switch.turn_on: desk_up_button
+            - delay: 16.3s
+            - switch.turn_off: desk_up_button
+            - delay: 0.5s
+            - switch.turn_on: desk_down_button
+            - delay: 0.5s
+            - switch.turn_off: desk_down_button
+            - logger.log: "Desk raised successfully."
+            - light.turn_on:
+                id: rgb_led
+                effect: "None"
+            - light.turn_on:
+                id: rgb_led
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 100%
+                transition_length: 0.2s
+          else:
+            - logger.log: "Cannot raise desk: occupancy sensor check failed"
+            - switch.turn_off: desk_raised
+            - script.execute: show_error_led
+            - if:
+                condition:
+                  lambda: 'return id(desk_occupancy).has_state();'
+                then:
+                  - script.execute: notify_desk_error_no_occupancy
+                else:
+                  - script.execute: notify_desk_error_unavailable
+
+  - id: lower_desk_script
+    mode: restart
+    then:
+      - script.stop: raise_desk_script
+      - if:
+          condition:
+            lambda: 'return id(desk_occupancy).has_state() && id(desk_occupancy).state;'
+          then:
+            - logger.log: "Lowering desk (occupancy detected)..."
+            - light.turn_on:
+                id: rgb_led
+                effect: "Movement Strobe"
+            - switch.turn_on: desk_down_button
+            - delay: 15.2s
+            - switch.turn_off: desk_down_button
+            - delay: 0.5s
+            - switch.turn_on: desk_up_button
+            - delay: 0.5s
+            - switch.turn_off: desk_up_button
+            - logger.log: "Desk lowered successfully."
+            - light.turn_on:
+                id: rgb_led
+                effect: "None"
+            - light.turn_on:
+                id: rgb_led
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 100%
+                transition_length: 0.2s
+          else:
+            - logger.log: "Cannot lower desk: occupancy sensor check failed"
+            - switch.turn_on: desk_raised
+            - script.execute: show_error_led
+            - if:
+                condition:
+                  lambda: 'return id(desk_occupancy).has_state();'
+                then:
+                  - script.execute: notify_desk_error_no_occupancy
+                else:
+                  - script.execute: notify_desk_error_unavailable

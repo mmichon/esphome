@@ -168,6 +168,8 @@ SCRIPT_OUTPUT="$(cat "$OUTPUT_FILE" 2>/dev/null || echo "Output capture failed")
 # Determine status
 if [ $EXIT_STATUS -eq 0 ]; then
   STATUS="SUCCESS"
+  # Exit immediately after successful upload
+  exit 0
 else
   STATUS="FAILED"
 fi
@@ -175,8 +177,8 @@ fi
 # Show iTerm2 notification
 show_iterm2_notification "$STATUS"
 
-# Send email if enabled
-if [ "$SEND_EMAIL" = true ]; then
+# Send email only on failures
+if [ "$SEND_EMAIL" = true ] && [ "$STATUS" = "FAILED" ]; then
   send_email "$STATUS" "$SCRIPT_OUTPUT"
 fi
 
