@@ -1,9 +1,9 @@
-# Build and upload LD2450 (espkitchen) when config changes.
+# Build and upload a config when it changes.
 # Usage:
-#   make upload   - build and upload once
-#   make watch    - watch m5nanoc6-ld2450.yaml and upload on change (requires fswatch)
+#   make upload CONFIG=presence-sensor.yaml DEVICE=espkitchen.local
+#   make watch  CONFIG=presence-sensor.yaml DEVICE=espkitchen.local  (requires fswatch)
 
-CONFIG := m5nanoc6-ld2450.yaml
+CONFIG := presence-sensor.yaml
 DEVICE := espkitchen.local
 
 .PHONY: upload watch

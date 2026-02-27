@@ -1,16 +1,17 @@
-# Mike's esphome configs
+# Mike's ESPHome configs
 
-Some sample configs for ESP32/ESP8266 microcontrollers running [esphome](https://github.com/esphome/esphome), interfacing with [Home Assistant](https://www.home-assistant.io/).
+ESPHome configurations for ESP32/ESP8266 microcontrollers integrated with [Home Assistant](https://www.home-assistant.io/).
 
-Example interfaces:
-* Controlling a 'dumb' standing desk with relay switches [espinlaw.yml]
-* Controlling an electric strike [espgarage.yml]
-* Detecting an open car tailgate with an HC-SR04 [espcar.yml]
-* Motion sensing with RCWL-0516 [espkitchen.yml]
-* Controlling a garage door with a relay switch [espgarage.yml]
-* Temperature sensing with DHT11 [espbedroom.yml]
-* Temperature sensing with DS18B20 [espinlaw.yml]
-* Controlling a TV with an IR transmitter [espinlaw.yml]
-* Streaming via an ESP32-cam [espcam.yml]
-* Sounding a simple home alarm via a piezoelectric speaker [espalarm.yml]
-* Yet another LilyGo-T5 based epaper screen as a frontend for Home Assistant data [esppaper.yml]
+## Active configs
+
+| File | Device | Description |
+|------|--------|-------------|
+| `doors-controller.yaml` | ESP8266 NodeMCU v2 (`espgarage`) | Garage door relay + gate lock actuators + buzzer + contact sensor |
+| `desk-controller.yaml` | M5Stack NanoC6 (`desk-c125`) | Standing desk raise/lower control with occupancy interlock and RGB status LED |
+| `presence-sensor.yaml` | M5Stack NanoC6 (`espkitchen`) | LD2450 mmWave radar presence detection + Red Light/Green Light game |
+| `trmnl.yaml` | ESP32 (`esptrmnl`) | TRMNL epaper display frontend for Home Assistant data |
+| `esp-cam.yaml` | ESP32-CAM | Camera streaming |
+
+## Archived configs
+
+Older configs are preserved in `archive/` for reference.
