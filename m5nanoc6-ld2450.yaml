@@ -1,0 +1,432 @@
+# =============================================================================
+# M5Stack NanoC6 (ESP32-C6) - LD2450 mmWave Presence Sensor
+# =============================================================================
+#
+# GPIO Pin Mappings:
+# ------------------
+# GPIO1  : UART TX (G1) - to LD2450 RX
+# GPIO2  : UART RX (G2) - from LD2450 TX
+# GPIO9  : Boot / Game Button (input, pull-up, active low)
+# GPIO19 : RGB LED Power Enable (output)
+# GPIO20 : WS2812 RGB LED Data (output)
+#
+# RGB LED Status Indicators:
+# --------------------------
+# Blinking orange   : not connected to Home Assistant
+# Off               : IDLE (game not running)
+# Blinking yellow   : READY (3s countdown)
+# Solid green       : GREEN_LIGHT (player may move)
+# Solid red         : RED_LIGHT (player must freeze)
+# Rapid white/red   : CAUGHT (warning flash 1.5s)
+# Rapid green/white : WIN (celebration 4s)
+#
+# =============================================================================
+
+substitutions:
+  hostname: "espkitchen"
+
+esphome:
+  name: ${hostname}
+  friendly_name: LD2450 Presence
+  build_path: /Users/mmichon/.esphome/build/${hostname}
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: rgb_led
+          red: 100%
+          green: 100%
+          blue: 0%
+          brightness: 100%
+          transition_length: 0.2s
+
+esp32:
+  variant: esp32c6
+  board: esp32-c6-devkitc-1
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  reboot_timeout: 15min
+
+globals:
+  - id: api_client_count
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: last_y
+    type: float
+    restore_value: false
+    initial_value: "0"
+  - id: last_time
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: calculated_velocity
+    type: float
+    restore_value: false
+    initial_value: "0"
+  - id: last_movement_direction
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+  - id: game_state
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: phase_start_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: green_duration_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "3000"
+  - id: red_duration_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "4000"
+  - id: caught_detection_count
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+  on_client_connected:
+    - lambda: id(api_client_count) = id(api_client_count) + 1;
+  on_client_disconnected:
+    - lambda: |-
+        if (id(api_client_count) > 0) {
+          id(api_client_count) = id(api_client_count) - 1;
+        }
+    - if:
+        condition:
+          lambda: 'return id(api_client_count) == 0;'
+        then:
+          - light.turn_on:
+              id: rgb_led
+              red: 100%
+              green: 100%
+              blue: 0%
+              brightness: 100%
+              transition_length: 0.2s
+
+captive_portal:
+
+logger:
+  level: INFO
+  logs:
+    ld2450: INFO
+    component: WARN
+
+ota:
+  - platform: esphome
+
+web_server:
+
+uart:
+  id: uart_ld2450
+  tx_pin: GPIO1
+  rx_pin: GPIO2
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+ld2450:
+  id: ld2450_radar
+  uart_id: uart_ld2450
+
+output:
+  - platform: gpio
+    pin: GPIO19
+    id: rgb_power
+    inverted: false
+
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO20
+    num_leds: 1
+    chipset: WS2812
+    name: "RGB LED"
+    id: rgb_led
+    internal: true
+    on_turn_on:
+      - output.turn_on: rgb_power
+    on_turn_off:
+      - output.turn_off: rgb_power
+
+binary_sensor:
+  - platform: gpio
+    name: "Game Button"
+    id: game_button
+    pin:
+      number: GPIO9
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on: 50ms
+    on_press:
+      - lambda: |-
+          if (id(game_state) == 0) {
+            srand(millis());
+            id(game_state) = 1;
+            id(phase_start_ms) = millis();
+            id(caught_detection_count) = 0;
+            ESP_LOGI("game", "Game started, entering READY");
+          } else {
+            id(game_state) = 0;
+            id(caught_detection_count) = 0;
+            ESP_LOGI("game", "Game cancelled, returning to IDLE");
+          }
+
+  - platform: ld2450
+    ld2450_id: ld2450_radar
+    has_target:
+      name: Presence
+      id: presence
+      on_press:
+        - logger.log:
+            format: "Target detected"
+            level: INFO
+      on_release:
+        - logger.log:
+            format: "No target detected"
+            level: INFO
+
+sensor:
+  - platform: ld2450
+    ld2450_id: ld2450_radar
+    target_count:
+      name: Target Count
+      id: target_count
+    target_1:
+      y:
+        name: Target 1 Distance
+        id: target1_y
+        unit_of_measurement: mm
+        device_class: distance
+        on_value:
+          - lambda: |-
+              uint32_t now = millis();
+              if (id(last_time) == 0) {
+                 id(last_time) = now;
+                 id(last_y) = x;
+                 return;
+              }
+              float dt = (now - id(last_time)) / 1000.0f;
+              if (dt < 0.05) return; // Ignore very frequent updates
+              
+              float dy = x - id(last_y);
+              float v_inst = dy / dt; // mm/s
+              
+              // EMA smoothing (alpha = 0.5) for ~1s response
+              float alpha = 0.5f;
+              id(calculated_velocity) = alpha * v_inst + (1.0f - alpha) * id(calculated_velocity);
+              
+              id(last_time) = now;
+              id(last_y) = x;
+
+              // Win check: 42 inches = 1066.8mm, only while GREEN_LIGHT active
+              if (id(game_state) == 2 && x > 0.0f && x < 1066.8f) {
+                id(game_state) = 5;
+                id(phase_start_ms) = millis();
+                id(caught_detection_count) = 0;
+                ESP_LOGI("game", "WIN! Target at %.1fmm (%.2f in)", x, x / 25.4f);
+              }
+          - logger.log:
+              format: "Target distance: %.2f ft"
+              args: ['x / 304.8']
+              level: INFO
+
+#  - platform: derivative
+#    name: "Target 1 Velocity"
+#    id: target1_velocity
+#    source_id: target1_y
+#    unit_of_time: s
+#    time_window: 3s
+
+text_sensor:
+  - platform: template
+    name: "Game State"
+    id: game_state_text
+    update_interval: 200ms
+    lambda: |-
+      switch (id(game_state)) {
+        case 0: return {"idle"};
+        case 1: return {"ready"};
+        case 2: return {"green"};
+        case 3: return {"red"};
+        case 4: return {"caught"};
+        case 5: return {"win"};
+        default: return {"idle"};
+      }
+
+  - platform: template
+    name: "Movement Direction"
+    id: movement_direction
+    update_interval: 100ms
+    lambda: |-
+      if (id(target_count).state == 0) {
+        return {"clear"};
+      }
+      if (id(target_count).state > 1) {
+        return {"fixed"};
+      }
+      
+      float v = id(calculated_velocity);
+      
+      // Threshold: 1 ft/s = 304.8 mm/s
+      if (v < -304.8f) {
+        return {"coming"};
+      }
+      if (v > 304.8f) {
+        return {"leaving"};
+      }
+      // Single target, low velocity -> fixed (do not default to coming)
+      return {"fixed"};
+    on_value:
+      - if:
+          condition:
+            lambda: 'return x != id(last_movement_direction);'
+          then:
+            - logger.log:
+                format: "Movement Direction changed to: %s"
+                args: ['x.c_str()']
+                level: INFO
+            - lambda: 'id(last_movement_direction) = x;'
+
+number:
+  - platform: ld2450
+    ld2450_id: ld2450_radar
+    presence_timeout:
+      name: "Presence Timeout"
+
+switch:
+  - platform: restart
+    name: "${hostname} Restart"
+
+interval:
+  - interval: 200ms
+    then:
+      - lambda: |-
+          uint32_t now = millis();
+          int state = id(game_state);
+          if (state == 0) return;
+
+          uint32_t elapsed = now - id(phase_start_ms);
+
+          if (state == 1) {
+            // READY: 3s countdown -> GREEN_LIGHT
+            if (elapsed >= 3000) {
+              id(green_duration_ms) = 2000 + (rand() % 4001);
+              id(game_state) = 2;
+              id(phase_start_ms) = now;
+              id(caught_detection_count) = 0;
+              ESP_LOGI("game", "GREEN_LIGHT for %u ms", id(green_duration_ms));
+            }
+          } else if (state == 2) {
+            // GREEN_LIGHT -> RED_LIGHT after timer
+            if (elapsed >= id(green_duration_ms)) {
+              id(red_duration_ms) = 3000 + (rand() % 4001);
+              id(game_state) = 3;
+              id(phase_start_ms) = now;
+              id(caught_detection_count) = 0;
+              ESP_LOGI("game", "RED_LIGHT for %u ms", id(red_duration_ms));
+            }
+          } else if (state == 3) {
+            // RED_LIGHT: caught detection + phase timer
+            if (abs(id(calculated_velocity)) > 200.0f && id(target_count).state > 0) {
+              id(caught_detection_count) = id(caught_detection_count) + 1;
+            } else {
+              id(caught_detection_count) = 0;
+            }
+            if (id(caught_detection_count) >= 2) {
+              id(caught_detection_count) = 0;
+              id(game_state) = 4;
+              id(phase_start_ms) = now;
+              ESP_LOGI("game", "CAUGHT!");
+            } else if (elapsed >= id(red_duration_ms)) {
+              id(green_duration_ms) = 2000 + (rand() % 4001);
+              id(game_state) = 2;
+              id(phase_start_ms) = now;
+              id(caught_detection_count) = 0;
+              ESP_LOGI("game", "RED expired, GREEN_LIGHT for %u ms", id(green_duration_ms));
+            }
+          } else if (state == 4) {
+            // CAUGHT_ANIM: 1.5s then back to RED_LIGHT
+            if (elapsed >= 1500) {
+              id(red_duration_ms) = 3000 + (rand() % 4001);
+              id(game_state) = 3;
+              id(phase_start_ms) = now;
+              id(caught_detection_count) = 0;
+              ESP_LOGI("game", "CAUGHT_ANIM done, RED_LIGHT for %u ms", id(red_duration_ms));
+            }
+          } else if (state == 5) {
+            // WIN: 4s celebration then IDLE
+            if (elapsed >= 4000) {
+              id(game_state) = 0;
+              id(caught_detection_count) = 0;
+              ESP_LOGI("game", "WIN animation complete, returning to IDLE");
+            }
+          }
+
+  - interval: 100ms
+    then:
+      - lambda: |-
+          uint32_t now = millis();
+          int state = id(game_state);
+          auto call = id(rgb_led).turn_on();
+          call.set_transition_length(10);
+
+          if (id(api_client_count) == 0) {
+            // No HA: orange blink at 400ms period
+            bool blink_on = ((now / 400) % 2) == 0;
+            call.set_brightness(blink_on ? 1.0f : 0.0f);
+            call.set_rgb(blink_on ? 1.0f : 0.0f, blink_on ? 0.5f : 0.0f, 0.0f);
+            call.perform();
+            return;
+          }
+
+          uint32_t elapsed = now - id(phase_start_ms);
+          switch (state) {
+            case 0:
+              call.set_brightness(0.0f);
+              call.set_rgb(0.0f, 0.0f, 0.0f);
+              break;
+            case 1: {
+              bool on = ((elapsed / 500) % 2) == 0;
+              call.set_brightness(on ? 1.0f : 0.0f);
+              call.set_rgb(1.0f, on ? 0.65f : 0.0f, 0.0f);
+              break;
+            }
+            case 2:
+              call.set_brightness(1.0f);
+              call.set_rgb(0.0f, 1.0f, 0.0f); // Green
+              break;
+            case 3:
+              call.set_brightness(1.0f);
+              call.set_rgb(1.0f, 0.0f, 0.0f); // Red
+              break;
+            case 4: {
+              bool white = ((elapsed / 150) % 2) == 0;
+              call.set_brightness(1.0f);
+              call.set_rgb(1.0f, white ? 1.0f : 0.0f, white ? 1.0f : 0.0f);
+              break;
+            }
+            case 5: {
+              bool green = ((elapsed / 150) % 2) == 0;
+              call.set_brightness(1.0f);
+              call.set_rgb(green ? 0.0f : 1.0f, 1.0f, green ? 0.0f : 1.0f);
+              break;
+            }
+            default:
+              call.set_brightness(0.0f);
+              call.set_rgb(0.0f, 0.0f, 0.0f);
+          }
+          call.perform();

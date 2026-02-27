@@ -1,0 +1,94 @@
+substitutions:
+  hostname: esplora-send
+
+esphome:
+  name: ${hostname}
+  platform: ESP32
+  board: ttgo-lora32-v1
+  includes:
+    - lora_send.h
+  libraries:
+    - "LoRa"
+    - "SPI"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+logger:
+ota:
+web_server:
+
+lora:
+  - platform: sx127x
+    id: lora_12
+    sync_word: 0x34
+    di0_pin: GPIO26
+    rst_pin: GPIO14
+    cs_pin: GPIO18
+    band: 868MHZ
+
+spi:
+  clk_pin: GPIO5
+  mosi_pin: GPIO27
+  miso_pin: GPIO19
+
+text_sensor:
+  - platform: custom
+    lambda: |-
+      auto lora_text_sensor = new lora_sender();
+      App.register_component(lora_text_sensor);
+      return {lora_text_sensor};
+
+    text_sensors:
+      name: "Lora Text Sensor"
+# sensor:
+#   - platform: wifi_signal
+#     name: "Lora 1 WiFi Signal Sensor"
+#     lora_name: lora1_wifi_signal_sensor
+#     update_interval: 5s
+#     send_to_lora: true
+#   - platform: lora
+#     rssi:
+#       name: "Lora2 Last RSSI"
+#       update_interval: 5s
+#     snr:
+#       name: "Lora2 Last SNR"
+#       update_interval: 5s
+
+# switch:
+#   - platform: gpio
+#     name: "Switch Binary Sensor 1"
+#     pin: GPIO25
+#     on_turn_on:
+#       - binary_sensor.template.publish:
+#           id: bin1
+#           state: ON
+#     on_turn_off:
+#       - binary_sensor.template.publish:
+#           id: bin1
+#           state: OFF
+#     send_to_lora: true
+
+# binary_sensor:
+#   - platform: template
+#     name: "Lora 1 Binary Sensor"
+#     id: bin1
+
+# text_sensor:
+#   - platform: template
+#     name: "Lora 1 Wifi SSID"
+#     id: text_info_ssid
+#     send_to_lora: true
+#     lambda: |-
+#       if ( id(my_global_int) == 0 ) {
+#         id(my_global_int)=1;
+#         return {"Hello World 1"};
+#       }else{
+#         id(my_global_int)=0;
+#         return {"Hello World 0"};
+#       }
+
+#     update_interval: 2s

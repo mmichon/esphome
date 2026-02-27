@@ -1,0 +1,98 @@
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+        
+substitutions:
+  location: Backyard
+  hostname: espresso
+  temp_offset: "-8.4"
+
+esphome:
+  name: ${hostname}
+  friendly_name: Test Device
+  # platform: ESP32
+  # board: dfrobot_beetle_esp32c3
+  # on_boot:
+    # priority: 600 #  Defaults to 600 DOESN'T WAIT FOR WIFI
+    # -100 waits till ALL IS INITIALIZED but NO EXECUTION HERE if no WIFI
+    # then:
+      # - wait_until:        # HOW THE HECK DO YOU USE  timeout:
+      #     wifi.connected:
+      # - wait_until:
+      #     condition:
+      #       api.connected:
+      #     timeout: 8s
+      # - logger.log: "Connected to API"
+      # - output.turn_on: done_pin
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  manual_ip:
+    static_ip: 10.0.0.124
+    gateway: 10.0.0.1
+    subnet: 255.255.255.0
+
+api:
+# captive_portal:
+# logger:
+ota:
+  platform: esphome
+web_server:
+
+deep_sleep:
+  run_duration: 10s
+  sleep_duration: 1min
+
+# mqtt:
+#   broker: '10.0.0.2'
+#   discovery: False
+#   discovery_retain: False
+
+# status_led:
+#   pin:
+#     number: GPIO10
+#     inverted: true
+
+# interval:
+#   - interval: 100ms
+#     then:
+#       - switch.toggle: status_led
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+  # - platform: template
+  #   name: Temperature
+  #   unit_of_measurement: "°F"
+  #   device_class: "temperature"
+  #   lambda: return temperatureRead() * 1.8 + 32 + ${temp_offset};
+
+# output:
+#   - platform: gpio
+#     pin: GPIO0
+    # id: done_pin
+
+# binary_sensor:
+#   # XKC-Y23 water level sensor
+#   - platform: gpio
+#     pin: GPIO1 # GPIO9 pin 12
+#     name: "Espresso Machine Water Level Low"
+#     filters:
+#       - invert:
+#     on_state:
+#       then:
+#         - logger.log: "Setting done pin"
+#         - output.turn_on: done_pin
+
+  # - platform: status
+  #   name: "Upload Status"
+  #   internal: true
+  # on_state:
+  #   then:
+  #     - logger.log: "Setting done pin"
+  #     - output.turn_on: done_pin

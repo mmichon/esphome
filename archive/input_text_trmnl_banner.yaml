@@ -1,0 +1,52 @@
+# Add this to your Home Assistant configuration.yaml in the template: section
+# This creates sensors that find the next non all-day calendar event
+# Place these sensors in the template: section alongside your existing calendar sensors
+
+# Sensor: Next Non All-Day Calendar Event Name
+# Finds the first calendar event (today or future) that is not an all-day event
+- sensor:
+    name: "Next Non All-Day Calendar Event Name"
+    unique_id: "next_non_all_day_calendar_event_name"
+    state: >
+      {% set events = state_attr('calendar.personal', 'events') | default([]) %}
+      {% set now_ts = now().timestamp() %}
+      {% for event in events %}
+        {% set event_start_ts = as_timestamp(event.start) %}
+        {% if event_start_ts >= now_ts %}
+          {% set duration = as_timestamp(event.end) - event_start_ts %}
+          {% if duration < 86400 %}
+            {# Only include events shorter than 24 hours (not all-day) #}
+            {% set start_dt = event.start | as_datetime %}
+            {% if start_dt.hour == 0 and start_dt.minute == 0 %}
+              {# Skip events starting exactly at midnight (likely all-day) #}
+              {% continue %}
+            {% endif %}
+            {{ event.summary }}
+            {% break %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
+# Sensor: Next Non All-Day Calendar Event Time
+- sensor:
+    name: "Next Non All-Day Calendar Event Time"
+    unique_id: "next_non_all_day_calendar_event_time"
+    state: >
+      {% set events = state_attr('calendar.personal', 'events') | default([]) %}
+      {% set now_ts = now().timestamp() %}
+      {% for event in events %}
+        {% set event_start_ts = as_timestamp(event.start) %}
+        {% if event_start_ts >= now_ts %}
+          {% set duration = as_timestamp(event.end) - event_start_ts %}
+          {% if duration < 86400 %}
+            {# Only include events shorter than 24 hours (not all-day) #}
+            {% set start_dt = event.start | as_datetime %}
+            {% if start_dt.hour == 0 and start_dt.minute == 0 %}
+              {# Skip events starting exactly at midnight (likely all-day) #}
+              {% continue %}
+            {% endif %}
+            {{ start_dt.strftime('%-I:%M %p') }}
+            {% break %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}

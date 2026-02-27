@@ -1,26 +1,14 @@
-# Wire color → D-pin → GPIO → Function
-# ----------------------------------------
-# white  | D7 | GPIO13 | extend_lock (output)
-# grey   | D5 | GPIO14 | retract_lock (output)
-# red    | D6 | GPIO12 | garage_button_relay (garage door)
-# yellow | D2 | GPIO4  | gate_buzzer (output)
-# orange | D1 | GPIO5  | garage_contact_sensor (input)
-# brown  |    | GND    | shared ground
-# (D4/GPIO2 = status LED, built-in)
-
 substitutions:
   hostname: espgarage
 
 esphome:
   name: ${hostname}
-  friendly_name: Doors Controller
+  platform: ESP32
+  board: esp32dev # WROOM32 https://circuits4you.com/2018/12/31/esp32-devkit-esp32-wroom-gpio-pinout/
   on_boot:
     priority: 600
     then:
       - lock.unlock: garage_lock
-
-esp8266:
-  board: nodemcuv2
 
 wifi:
   ssid: !secret wifi_ssid
@@ -54,7 +42,7 @@ binary_sensor:
     id: garage_contact_sensor
     #pin: 12
     pin:
-      number: 5 #D1
+      number: 12 #D12
       inverted: True
       mode: INPUT_PULLUP
     internal: false
@@ -67,8 +55,6 @@ binary_sensor:
   #     mode: INPUT_PULLUP
 
 api:
-  encryption:
-    key: !secret api_encryption_key
   services:
     - service: long_gate_open
       then:
@@ -86,7 +72,7 @@ switch:
     name: "${hostname} Restart"
 
   - platform: gpio
-    pin: 12 #D6
+    pin: 18 #D18
     restore_mode: ALWAYS_OFF
     id: garage_button_relay
     internal: true
@@ -95,7 +81,7 @@ switch:
       - switch.turn_off: garage_button_relay
 
   - platform: gpio
-    pin: 4 #D2
+    pin: 4 #D4
     restore_mode: ALWAYS_OFF
     name: "Gate Buzzer"
     id: gate_buzzer
@@ -117,12 +103,12 @@ switch:
   #     - switch.turn_off: gate_buzzer_relay
 
   - platform: gpio
-    pin: 13 #D7
+    pin: 19
     interlock: &interlock [extend_lock, retract_lock]
     id: extend_lock
     restore_mode: ALWAYS_OFF
   - platform: gpio
-    pin: 14 #D5
+    pin: 5
     interlock: *interlock
     id: retract_lock
     restore_mode: ALWAYS_OFF

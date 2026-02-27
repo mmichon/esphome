@@ -1,0 +1,70 @@
+substitutions:
+  hostname: espworkbench
+
+esphome:
+  name: ${hostname}
+  friendly_name: Tiny Camera
+
+esp32:
+  board: esp32dev # https://randomnerdtutorials.com/esp32-cam-ai-thinker-pinout/
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+captive_portal:
+logger:
+ota:
+  platform: esphome
+web_server:
+  port: 80
+
+switch:
+  - platform: restart
+    name: "Restart"
+
+status_led:
+  pin:
+    number: GPIO33
+    inverted: true
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+esp32_camera_web_server:
+  - port: 8080
+    mode: stream
+  - port: 8081
+    mode: snapshot
+
+# Programming over serial at https://www.geekering.com/categories/embedded-sytems/esp32/ricardocarreira/esp32-cam-board-how-to-begin-and-blink-a-led/
+# Use 5V and ground GPIO0
+esp32_camera:
+  external_clock:
+    pin: GPIO0
+    frequency: 20MHz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins: [GPIO5, GPIO18, GPIO19, GPIO21, GPIO36, GPIO39, GPIO34, GPIO35]
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  power_down_pin: GPIO32
+  name: espcam
+
+psram:
+  
+# Flashlight
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: gpio_4
+
+## GPIO_4 is the flash light pin
+light:
+  - platform: binary
+    output: gpio_4
+    name: "Light"

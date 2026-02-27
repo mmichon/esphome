@@ -1,0 +1,13 @@
+# Add this to your Home Assistant configuration.yaml
+# This creates a binary helper to enable/disable debug mode on the TRMNL display
+# Place this in the input_boolean: section
+
+input_boolean:
+  trmnl_debug_mode:
+    name: "TRMNL Debug Mode"
+    icon: mdi:bug
+    initial: false
+
+
+
+
