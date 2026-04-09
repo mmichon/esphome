@@ -171,3 +171,19 @@ lock:
       - switch.turn_on: retract_lock
       - delay: 2sec
       - switch.turn_off: retract_lock
+
+  - platform: template
+    name: "Gate"
+    id: gate_lock
+    lambda: |-
+      if (id(gate_buzzer).state) {
+        return LOCK_STATE_UNLOCKED;
+      } else {
+        return LOCK_STATE_LOCKED;
+      }
+    lock_action:
+      - switch.turn_off: gate_buzzer
+    unlock_action:
+      - switch.turn_on: gate_buzzer
+      - delay: 8s
+      - lock.lock: gate_lock
