@@ -28,7 +28,7 @@ esphome:
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
-            entity_id: cover.garage_door_2
+            entity_id: cover.garage_door
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -100,7 +100,7 @@ ota:
 
 deep_sleep:
   id: managed_sleep
-  sleep_duration: 30min
+  sleep_duration: 60min
   wakeup_pin:
     number: GPIO0
     mode: INPUT_PULLUP
@@ -110,12 +110,15 @@ deep_sleep:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  power_save_mode: none  # Disable power save for faster connection, then sleep immediately
-  # Note: Consider testing power_save_mode: light with ESP-IDF for better power efficiency
+  power_save_mode: light  # Light power save; active window is short enough that latency impact is negligible
   fast_connect: true
   reboot_timeout: 2min  # Reduced from 5min to fail faster and sleep sooner
   # Removed redundant on_connect entity fetches - boot sequence already fetches all entities
   # This saves 17 API calls per wake cycle since WiFi connects fresh each time from deep sleep
+  manual_ip:
+    static_ip: 10.0.0.200
+    gateway: 10.0.0.1
+    subnet: 255.255.255.0
 
 # Captive portal disabled - not needed for battery-powered device with deep sleep
 # captive_portal:
@@ -215,6 +218,10 @@ font:
     size: 104
     glyphs:
       - "\U0000f8aa" # potted_plant (dry plant) - Material Symbols
+  - file: "fonts/GoogleSans-BoldItalic.ttf"
+    id: quote_font
+    size: 16
+    glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 
 globals:
   - id: battery_glyph
@@ -303,7 +310,7 @@ script:
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
-            entity_id: cover.garage_door_2
+            entity_id: cover.garage_door
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -345,11 +352,23 @@ script:
   - id: delayed_deep_sleep
     mode: restart
     then:
-      - delay: 100ms  # Reduced from 200ms to sleep sooner
+      - delay: 100ms
       - lambda: |-
-          // ESP-IDF automatically reduces CPU frequency before sleep
-          // Preferences are automatically saved by ESPHome when they change
-          // The flash_write_interval controls how frequently they're written to flash
+          // If we're in the night window (midnight–7am), sleep until 7:00am instead of
+          // the default 60min. This eliminates ~12 unnecessary wake cycles per night.
+          auto current_time = id(ha_time).now();
+          if (current_time.is_valid()) {
+            int h = current_time.hour;
+            int m = current_time.minute;
+            int s = current_time.second;
+            if (h >= 0 && h < 7) {
+              uint32_t seconds_until_7am = ((7 - h) * 3600) - (m * 60) - s;
+              if (seconds_until_7am < 60) seconds_until_7am = 60; // safety floor
+              id(managed_sleep).set_sleep_duration(seconds_until_7am * 1000ULL);
+            } else {
+              id(managed_sleep).set_sleep_duration(60ULL * 60 * 1000); // restore 60min default
+            }
+          }
           id(managed_sleep).begin_sleep(true);
 
 sensor:
@@ -690,7 +709,7 @@ text_sensor:
     attribute: state
   - platform: homeassistant
     id: garage_door
-    entity_id: cover.garage_door_2
+    entity_id: cover.garage_door
     attribute: state
     on_value:
       then:
@@ -834,7 +853,7 @@ display:
         banner_text = date_buf;
       }
       it.printf(center_x, current_y, id(date_font), TextAlign::TOP_CENTER, "%s", banner_text.c_str());
-      current_y += 90; // Move down for next row
+      current_y += 78; // Move down for next row
 
       // --- Row 2: Next calendar event (medium font) ---
       // Note: Using filtered sensors from Home Assistant that exclude all-day events
@@ -880,7 +899,7 @@ display:
       if (!event_text.empty()) {
         it.printf(center_x, current_y, id(mid_font), TextAlign::TOP_CENTER, "%s", event_text.c_str());
       }
-      current_y += 70; // Move down for next row (increased spacing)
+      current_y += 62; // Move down for next row
 
       // --- Row 3: Open doors/windows and lights status (status font) ---
       std::string status_text;
@@ -942,7 +961,7 @@ display:
       }
 
       it.printf(center_x, current_y, id(status_font), TextAlign::TOP_CENTER, "%s", status_text.c_str());
-      current_y += 70; // Move down for next row (increased spacing)
+      current_y += 62; // Move down for next row
 
       // --- Row 5: Icons for guest mode, packages, trash night, alarm, lights, doors (medium font/icons) ---
       // Count how many icons will be displayed
@@ -1101,6 +1120,167 @@ display:
       }
 
       current_y += 80; // Move down for next row
+
+      // --- Quote: Jack Handey Deep Thought for today ---
+      {
+        const char* const quotes[] = {
+          "Before you criticize someone, you should walk a mile in their shoes. That way, when you criticize them, you're a mile away and you have their shoes.",
+          "It takes a big man to cry, but it takes a bigger man to laugh at that man.",
+          "The face of a child can say it all, especially the mouth part of the face.",
+          "If trees could scream, would we be so cavalier about cutting them down? We might, if they screamed all the time, for no good reason.",
+          "To me, boxing is like a ballet, except there's no music, no choreography, and the dancers hit each other.",
+          "I hope that after I die, people will say of me: 'That guy sure owed me a lot of money.'",
+          "Dad always thought laughter was the best medicine, which I guess is why several of us died of tuberculosis.",
+          "When you die, if you get a choice between going to regular heaven or pie heaven, choose pie heaven. It might be a trick, but if it's not, mmmmm, boy.",
+          "I think there's a lesson to be learned from that whole dented-can thing, but I'm not sure what it is.",
+          "It's too bad that whole families have to be torn apart by something as simple as wild dogs.",
+          "I hope life isn't a big joke, because I don't get it.",
+          "It's funny that pirates were always going around searching for treasure, and they never realized that the real treasure was the fond memories they were creating.",
+          "If a kid asks where rain comes from, I think a cute thing to tell him is 'God is crying.' And if he asks why God is crying, another cute thing: 'Probably because of something you did.'",
+          "Sometimes I think you have to march right in and demand your rights, even if you don't know what your rights are, or who the person is you're talking to. Then on the way out, slam the door.",
+          "To me, it's a good idea to always carry two sacks of something when you walk around. That way, if anybody says 'Hey, can you give me a hand?' you can say 'Sorry, got these sacks.'",
+          "Consider the daffodil. And while you're doing that, I'll be over here, going through your stuff.",
+          "The tiger can't change his spots. No, wait, he did! Good for him!",
+          "When you go in for a job interview, I think a good thing to ask is if they ever press charges.",
+          "Children need encouragement. So if a kid gets an answer right, tell him it was a lucky guess. That way, he develops a good, lucky feeling.",
+          "Whether they find a life there or not, I think Jupiter should be considered an enemy planet.",
+          "I think a good gift for the President would be a chocolate revolver. And since he's so busy, you'd probably have to run up to him real quick and give it to him.",
+          "If you ever reach total enlightenment while you're drinking a beer, I bet you could shoot that beer right out your nose.",
+          "Whenever I see an old lady slip and fall on a wet sidewalk, my first instinct is to laugh. But then I think, what if I were an ant, and she fell on me. Then it wouldn't seem so funny.",
+          "I think the mistake a lot of us make is thinking the state-appointed shrink is our friend.",
+          "I believe in making the world safe for our children, but not our children's children, because I don't think children should be having sex.",
+          "The crows seemed to be calling his name, thought Caw.",
+          "Of all the different types of bears, I think my favorite would have to be the panda bear, because they're black and white.",
+          "Love can sweep you off your feet and carry you along. But the ride always ends, and you end up feeling lonely and bitter. Wait. That's not love I'm describing. I'm thinking of a monorail.",
+          "Even though I was their captive, the Indians allowed me to participate in some of their rituals. But I was always careful to not let them teach me too much.",
+          "If you ever catch on fire, try to avoid seeing yourself in the mirror, because I bet that's what really throws you into a panic.",
+          "I wish outer space guys would conquer the Earth and make people speak only one language, because I'm tired of seeing all those subtitles in foreign movies.",
+          "Too bad you can't buy a voodoo globe so that you could make the earth spin real fast and freak everybody out.",
+          "If you saw two guys named Hambone and Flippy, which one would you think liked dolphins the most? I'd say Flippy, wouldn't you? You'd be wrong, though. It's Hambone.",
+          "Probably the saddest thing you'll ever see is a mosquito sucking on a mummy. Forget it, little friend.",
+          "To me, clowns aren't funny. In fact, they're kind of scary. I think it goes back to the time I went to the circus, and a clown killed my dad.",
+          "It's easy to sit there and say you'd like to have more money. And I guess that's what I like about it. It's easy. Just sitting there, rocking back and forth, wanting that money.",
+          "Blow ye winds, like the trumpet blows; but without that noise.",
+          "I bet one legend that keeps recurring throughout history, in every culture, is the story of Popeye.",
+          "I think a new, different kind of bowling should be carpet bowling. It's just like regular bowling, only the lanes are carpet instead of wood.",
+          "I think there should be something in science called the 'reindeer effect.' I don't know what it would be, but I think it'd be good to have it in there.",
+          "If you ever crawl inside an old hollow log and go to sleep, and while you're in there some guys come and seal up both ends and then put it on a truck and take it to another city, boy, I don't know what to tell you.",
+          "Sometimes I think I'd be better off dead. No, wait, not me, you.",
+          "Anytime I see something screech across a room and latch onto someone's neck, and the guy screams and tries to get it off, I have to laugh, because what is that thing?",
+          "I think one of the greatest moments in a man's life must be when he holds his firstborn child for the first time. Mine was when I got my first car.",
+          "It makes me mad when people say I turned and ran like a scared rabbit. Maybe it was like an angry rabbit, who was running to go fight in another fight, away from the first fight.",
+          "I think Superman and Santa Claus are actually the same guy, and I'll tell you why: I've never seen them in the same room at the same time.",
+          "If you drop a pumpkin off a tall building, I bet a funny thing that would happen is that a dog would come up and start eating the pumpkin.",
+          "I remember how my great-uncle Jerry would sit on the porch and whittle all day long. Once he whittled me a toy boat out of a larger toy boat I had. It was almost as good as the first one.",
+          "I think it would be interesting if old people got anti-Alzheimer's disease where they slowly began to remember things they'd forgotten.",
+          "If you ever go temporarily insane, don't shoot somebody, like a lot of people do. Instead, try to get some weeding done, because you'd really be surprised.",
+          "Instead of having 'answers' on a math test, they should just call them 'impressions,' and if you got a different 'impression,' so what, can't we all be brothers?",
+          "We used to laugh at Grandpa when he'd head off and go skin diving. But we wouldn't be laughing that evening when he'd come back with a mermaid.",
+          "I wish I had a dollar for every time I spent a dollar, because then, yahoo!, I'd have all my money back.",
+          "If God dwells inside us, like some people say, I sure hope He likes enchiladas, because that's what He's getting!",
+          "I think my new thing will be to try to be a real strict vegetarian, but eat as much bacon as I want.",
+          "When you're riding in a time machine way far into the future, don't stick your elbow out the window, or it'll turn into a fossil.",
+          "If you're a young Mafia gangster out on your first date, I bet it's real embarrassing if someone tries to kill you.",
+          "If you're a cowboy and you're dragging a guy behind your horse, I bet it would really make you mad if you looked back and the guy was reading a magazine.",
+          "If you go parachuting, and your parachute doesn't open, and your friends are all watching you fall, I think a funny gag would be to pretend you were swimming.",
+          "Probably the earliest flyswatters were nothing more than some sort of striking surface attached to the end of a long stick.",
+          "Maybe in order to understand mankind, we have to look at the word itself: Mankind. Basically, it's made up of two separate words: mank and ind. What do these words mean? It's a mystery.",
+          "If you ever fall off the Sears Tower, just go limp, because maybe you'll look like a dummy and people will try to catch you because, hey, free dummy.",
+          "I can picture in my mind a world without war, a world without hate. And I can picture us attacking that world, because they'd never expect it.",
+          "I wish scientists would discover something that says it's really good for you to eat a big bowl of ice cream every day.",
+          "Instead of mousetraps, what about baby traps? Not to harm the babies, but just to hold them down until they can be removed from the premises.",
+          "If you're in a war, instead of throwing a hand grenade at some guys, throw one of those small pumpkins. Maybe it'll make everyone think how stupid war is, and then you can throw a real one.",
+          "Maybe the best thing would be to not fight at all. But that could end up being a lot worse.",
+          "I think the biggest mistake most people make when they pick a place to live is they don't ask the right questions.",
+          "Laurie got offended that I used the word 'puke.' But to me, that's what her dinner tasted like.",
+          "You know one thing that will really make a woman mad? Just run up and sort of throw a handful of mud on her. I don't know why it works, but it does.",
+          "If I was being executed by injection, I'd clean up my cell real neat. Then, when they came to get me, I'd say, 'Injection? I thought you said inspection.' They'd probably feel real bad.",
+          "Here's a good trick: get a job as a judge at the Olympics and then score everybody a zero. 'Why did you give everyone a zero?' 'Life is a zero,' you'd say.",
+          "As the light changed from red to green to yellow and back to red again, I sat there thinking about life. Was it nothing more than a bunch of honking and yelling? Sometimes it seemed that way.",
+          "Most of the time it was probably real bad being stuck down in a dungeon. But some days, when there was a bad storm outside, you'd look out your little window and think 'Boy, I'm glad I'm not out in that.'",
+          "If you ever accidentally poke someone in the eye with a stick, don't try to cover it up by saying 'I was trying to poke you in the eye.' You'll just make it worse.",
+          "I used to think that the brain was the most wonderful organ in my body. Then I realized who was telling me this.",
+          "If you're an ant, and you're walking along the top of a cup of pudding, you probably have no idea that the only thing between you and disaster is the strength of that pudding skin.",
+          "A funny thing to do is, if you're out hiking and your friend gets bitten by a snake, suck out the poison, but pretend you got the poison instead. Then you have to fake being sick for about an hour.",
+          "When I meet a new guy, I ask him if he has kids. If he says yes, I say 'Me too.' That way we have something in common, even though I don't actually have any kids.",
+          "I bet if you were a clown, after a hard day's work, you could sit around and complain how some of the kids were afraid of you, while other clowns laughed at you.",
+          "I wouldn't be surprised if someday some fishermen caught a big shark and cut it open, and there inside was a whole person. Then they cut open the person, and there's a little baby shark.",
+          "Sometimes when I feel like killing someone, I do a little trick to calm myself down. I'll go over to the person's house and ring the doorbell. When the person comes to the door, I'm gone.",
+          "I think it's interesting that cologne rhymes with alone.",
+          "I think a good product would be a nose hair comb. I don't know why you'd use it, but hey.",
+          "If a child asks where babies come from, I think it's important to be totally honest with him, so I'll tell him the whole story of the stork.",
+          "Whenever you read a good book, it's like the author is right there, in the room, talking to you, which is why I don't like to read good books.",
+          "I think it's wrong that only one company makes the game Monopoly.",
+          "Instead of a trap door, what about a trap window? The guy looks out it, and if he leans too far, he falls out. Wait. I guess that's just a window. Never mind.",
+          "If you lived in the Dark Ages and you were a catapult operator, I bet the most common question people would ask is 'Can't you make it shoot farther?' 'No, I'm afraid that's as far as it shoots.'",
+          "The memories of my family outings are still a source of strength to me. I remember we'd all pile into the car and drive and drive. I'm not sure where we'd go, but I think there were some trees there.",
+          "I hope they find intelligent life in space, because I could use the conversation.",
+          "I think a fun thing to do for old people is sneak up behind them and tap them on the shoulder. They think a ghost did it.",
+          "I think the best way to stop crime is to have everyone wear nametags. That way you always know who's doing the crime.",
+          "I guess we were all guilty, in a way. We all shot him, we all skinned him, and we all got a bumper sticker that said 'I helped skin Bob.'",
+          "I think if I were a woman I'd be a very mean woman, because I wouldn't take any crap from anybody.",
+          "Maybe in order to understand mankind we have to look at the word itself: Mankind. Basically it's made up of two words: mank and ind. What do these words mean? It's a mystery, and that's why so is mankind.",
+          "I think there's something wrong with me because I always want to own things. Like, right now I'm thinking about how nice it would be to own a bunch of stuff.",
+          "Maybe the best thing we could do is forget everything we know about the world and just start over. Except for math.",
+          "I think my new policy on money is that it should be given to me more.",
+          "If you work at home, I don't think it's a good idea to have a time clock. But if you do, make sure to take it in for repairs a lot so it looks like you're putting in extra hours.",
+          "I bet a fun thing would be to go way back in time to where there was going to be an eclipse and tell the cave men 'If I have come to destroy you, make the sun go away.' Then eat a donut.",
+          "I think someone should design exercise equipment that also does your laundry.",
+          "I think a good rule of thumb is: if it fits in your ear, it's probably not furniture.",
+          "I wonder if in some bizarro world, instead of people going on vacation and snapping pictures, they went on vacation and sketched pictures with a little pad and pencil.",
+          "Instead of having 'answers' on a test, they should just call them 'impressions,' and if you got a different 'impression,' so what, can't we all be brothers?",
+          "I think there should be a class where kids learn to appreciate music by listening to it in a quiet room, and another class where they learn to appreciate quiet by listening to music first.",
+          "I think one thing that would help solve a lot of problems is if people would just talk to each other more and listen less.",
+          "If I ever get real rich, I hope I'm not real mean to poor people, like I am now.",
+          "I wish I could talk to the animals, just to see if they have any tips for me.",
+          "I think a good way to get into someone's house is to say you're delivering a piano. It doesn't matter if you have a piano.",
+          "I think there are a lot of things we can learn from dogs. For one thing, we should sniff everything before we eat it.",
+          "To me, it's always a good idea to carry two sacks of something when you walk around.",
+          "I think it would be great to be a dog, and roll around in things and just enjoy life, without having to worry about stuff like rent and bills and haircuts.",
+          "I think a good movie would be about a guy who kills people and the main character is trying to stop him. Maybe they call the killer something scary, like 'The Slasher' or 'Stab-Man.'",
+          "Probably the earliest flyswatters were nothing more than some sort of striking surface attached to the end of a long stick.",
+        };
+        const int n = sizeof(quotes) / sizeof(quotes[0]);
+        int idx = now.is_valid() ? ((now.day_of_month - 1 + (now.month - 1) * 31) % n) : 0;
+        std::string q = quotes[idx];
+
+        // Word-wrap to ~65 chars per line (bold italic is wider), 3 lines max
+        std::string l1, l2, l3;
+        const int max_ch = 65;
+        auto wrap_next = [&](std::string &line, std::string &remaining) {
+          if (remaining.empty()) return;
+          if ((int)remaining.length() <= max_ch) {
+            line = remaining; remaining = "";
+          } else {
+            size_t sp = remaining.rfind(' ', max_ch);
+            if (sp == std::string::npos || sp == 0) sp = max_ch;
+            line = remaining.substr(0, sp);
+            remaining = remaining.substr(sp + 1);
+          }
+        };
+        std::string rem = q;
+        wrap_next(l1, rem);
+        wrap_next(l2, rem);
+        if (!rem.empty()) {
+          if ((int)rem.length() <= max_ch) {
+            l3 = rem;
+          } else {
+            l3 = rem.substr(0, max_ch - 3) + "...";
+          }
+        } else if (!l2.empty()) {
+          l3 = l2; l2 = l1; l1 = "";
+        } else {
+          l3 = l1; l1 = "";
+        }
+
+        // Render: skip empty lines, always show l3 and attribution
+        if (!l1.empty())
+          it.printf(center_x, 356, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l1.c_str());
+        if (!l2.empty())
+          it.printf(center_x, 376, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l2.c_str());
+        it.printf(center_x, 396, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l3.c_str());
+        it.printf(scr_w - 20, 418, id(quote_font), TextAlign::BOTTOM_RIGHT, "-- by Jack Handey");
+      }
 
       // --- Row 6: Bottom row - Battery % (right) and last updated time (left) (tiny font) ---
       const int bottom_y = scr_h - 30; // Moved up by 10 pixels

@@ -15,9 +15,16 @@ esphome:
   name: ${hostname}
   friendly_name: Doors Controller
   on_boot:
-    priority: 600
-    then:
-      - lock.unlock: garage_lock
+    - priority: 600
+      then:
+        - lock.unlock: garage_lock
+    - priority: -100
+      then:
+        - if:
+            condition:
+              binary_sensor.is_on: garage_contact_sensor
+            then:
+              - script.execute: garage_auto_close_timer
 
 esp8266:
   board: nodemcuv2
@@ -38,6 +45,12 @@ status_led:
     number: GPIO2
     inverted: true
 
+globals:
+  - id: auto_close_active
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+
 sensor:
   # - platform: wifi_signal
   #   name: Door Controller WiFi Strength
@@ -51,13 +64,26 @@ sensor:
 
 binary_sensor:
   - platform: gpio
+    name: "147 Garage Contact"
     id: garage_contact_sensor
+    device_class: garage_door
     #pin: 12
     pin:
       number: 5 #D1
       inverted: True
       mode: INPUT_PULLUP
     internal: false
+    on_press:
+      - script.execute: garage_auto_close_timer
+    on_release:
+      - script.stop: garage_auto_close_timer
+  - platform: homeassistant
+    id: ha_garage_auto_close
+    entity_id: input_boolean.garage_auto_close
+    on_state:
+      - globals.set:
+          id: auto_close_active
+          value: !lambda 'return x;'
   # - platform: gpio
   #   name: "Gate Contact Switch"
   #   device_class: door
@@ -67,6 +93,7 @@ binary_sensor:
   #     mode: INPUT_PULLUP
 
 api:
+  reboot_timeout: 0s
   encryption:
     key: !secret api_encryption_key
   services:
@@ -127,6 +154,26 @@ switch:
     id: retract_lock
     restore_mode: ALWAYS_OFF
 
+script:
+  - id: garage_auto_close_timer
+    mode: restart
+    then:
+      - delay: 900s
+      - delay: 20s
+      - if:
+          condition:
+            and:
+              - binary_sensor.is_on: garage_contact_sensor
+              - lambda: 'return id(auto_close_active);'
+          then:
+            - if:
+                condition:
+                  lock.is_locked: garage_lock
+                then:
+                  - lock.unlock: garage_lock
+                  - delay: 2.5s
+            - switch.turn_on: garage_button_relay
+
 cover:
   - platform: template
     name: "Garage Door"
@@ -138,39 +185,47 @@ cover:
       } else {
         return COVER_CLOSED;
       }
-    # chatgpt used for the below logic
     open_action:
       - if:
           condition:
-            lock.is_unlocked: garage_lock
+            lock.is_locked: garage_lock
           then:
-            - switch.turn_on: garage_button_relay
-            - delay: 0.5s
-            - switch.turn_off: garage_button_relay
+            - lock.unlock: garage_lock
+            - delay: 2.5s
+      - switch.turn_on: garage_button_relay
     close_action:
       - if:
           condition:
-            lock.is_unlocked: garage_lock
+            lock.is_locked: garage_lock
           then:
-            - switch.turn_on: garage_button_relay
-            - delay: 0.5s
-            - switch.turn_off: garage_button_relay
+            - lock.unlock: garage_lock
+            - delay: 2.5s
+      - switch.turn_on: garage_button_relay
 
 lock:
   - platform: template
     name: "Garage Lock"
     id: garage_lock
-    optimistic: true
     disabled_by_default: true
     lock_action:
-      - switch.turn_on: extend_lock
-      - delay: 1sec
-      - switch.turn_off: extend_lock
+      - if:
+          condition:
+            binary_sensor.is_off: garage_contact_sensor
+          then:
+            - switch.turn_on: extend_lock
+            - delay: 1sec
+            - switch.turn_off: extend_lock
+            - lock.template.publish:
+                id: garage_lock
+                state: LOCKED
 
     unlock_action:
       - switch.turn_on: retract_lock
       - delay: 2sec
       - switch.turn_off: retract_lock
+      - lock.template.publish:
+          id: garage_lock
+          state: UNLOCKED
 
   - platform: template
     name: "Gate"

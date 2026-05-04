@@ -156,13 +156,44 @@ binary_sensor:
             format: "No target detected"
             level: INFO
 
+  - platform: template
+    name: "Couch Zone Occupied"
+    id: couch_zone_occupied
+    device_class: occupancy
+
+  - platform: template
+    name: "Desk Zone Occupied"
+    id: desk_zone_occupied
+    device_class: occupancy
+
 sensor:
   - platform: ld2450
     ld2450_id: ld2450_radar
     target_count:
       name: Target Count
       id: target_count
+    zone_1:
+      target_count:
+        name: "Couch Zone Target Count"
+        id: couch_zone_count
+        on_value:
+          - binary_sensor.template.publish:
+              id: couch_zone_occupied
+              state: !lambda return x > 0;
+    zone_2:
+      target_count:
+        name: "Desk Zone Target Count"
+        id: desk_zone_count
+        on_value:
+          - binary_sensor.template.publish:
+              id: desk_zone_occupied
+              state: !lambda return x > 0;
     target_1:
+      x:
+        name: Target 1 X Position
+        unit_of_measurement: mm
+        device_class: distance
+        entity_category: diagnostic
       y:
         name: Target 1 Distance
         id: target1_y
@@ -233,6 +264,32 @@ number:
     ld2450_id: ld2450_radar
     presence_timeout:
       name: "Presence Timeout"
+    zone_1:
+      x1:
+        name: "Couch Zone X1"
+        entity_category: config
+      y1:
+        name: "Couch Zone Y1"
+        entity_category: config
+      x2:
+        name: "Couch Zone X2"
+        entity_category: config
+      y2:
+        name: "Couch Zone Y2"
+        entity_category: config
+    zone_2:
+      x1:
+        name: "Desk Zone X1"
+        entity_category: config
+      y1:
+        name: "Desk Zone Y1"
+        entity_category: config
+      x2:
+        name: "Desk Zone X2"
+        entity_category: config
+      y2:
+        name: "Desk Zone Y2"
+        entity_category: config
 
 switch:
   - platform: restart
