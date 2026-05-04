@@ -6,3 +6,8 @@
 archive/secrets.yaml
 /AGENTS.md
 /scripts/
+*.bak
+snapshot.json
+tinytuya.json
+tuya-raw.json
+tuya_ble_blind.py
