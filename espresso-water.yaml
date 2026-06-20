@@ -1,0 +1,141 @@
+# =============================================================================
+# DFRobot Beetle ESP32-C3 - Espresso Machine Low-Water Sensor (XKC-Y23A-NPN)
+# Battery (LiPo on BAT pad, onboard TP4057 charging) + deep sleep.
+#
+# Wake schedule: twice a day, just before coffee (06:45 and 12:30 local). On
+# each wake it connects to HA, reports the water level, and the INSTANT HA has
+# the reading it computes the time to the next scheduled check and deep-sleeps
+# exactly that long (clock-anchored via HA time, self-correcting). ~8 s awake
+# per wake -> battery limited by standby current, ~many months on a 1000 mAh cell.
+#
+# GPIO6 powers the 3.3 V sensor only while awake; open-collector NPN read on
+# GPIO7 with internal pull-up (flip `invert:` if ON/OFF reads reversed).
+#
+# Wiring (XKC-Y23A-NPN -> DFRobot Beetle ESP32-C3, pads labeled by GPIO number):
+#   brown (VCC) -> pad 6 / GPIO6  (3.3 V power + switch, HIGH only while awake)
+#   blue  (GND) -> GND
+#   black (OUT) -> pad 7 / GPIO7  (digital input, internal pull-up)
+#   LiPo cell   -> BAT / GND pads (onboard TP4057 charges over USB-C)
+# NOTE: avoid pad 2 (strapping/ADC), 8/9 (strapping), 20/21 (UART0), 18/19 (USB).
+# =============================================================================
+
+substitutions:
+  hostname: "espresso"
+  # Scheduled check times (local), as minutes-since-midnight: 06:45 and 12:30.
+  check1_min: "405"
+  check2_min: "750"
+
+esphome:
+  name: ${hostname}
+  friendly_name: Espresso Water
+  build_path: /Users/mmichon/.esphome/build/${hostname}
+
+esp32:
+  variant: esp32c3
+  board: esp32-c3-devkitm-1   # DFRobot Beetle ESP32-C3 (ESP32-C3-MINI-1, 4 MB)
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+  # "Sleep as soon as HA has the reading": once a client connects, wait for the
+  # clock to sync + let the state flush, then sleep until the next check time.
+  on_client_connected:
+    - delay: 1s
+    - wait_until:
+        condition:
+          lambda: 'return id(ha_time).now().is_valid();'
+        timeout: 8s
+    - delay: 1s                      # let the binary_sensor state reach HA
+    - if:
+        condition:
+          switch.is_off: prevent_sleep
+        then:
+          - lambda: |-
+              auto t = id(ha_time).now();
+              uint32_t secs;
+              if (!t.is_valid()) {
+                secs = 3600;         // time didn't sync -> retry in 1 h
+              } else {
+                const int t1 = ${check1_min};   // 06:45
+                const int t2 = ${check2_min};   // 12:30
+                int now_min = t.hour * 60 + t.minute;
+                int target;
+                if (now_min < t1)       target = t1;
+                else if (now_min < t2)  target = t2;
+                else                    target = t1 + 24 * 60;  // tomorrow 06:45
+                long d = (long)(target - now_min) * 60 - t.second;
+                if (d < 60) d = 60;    // guard against tiny/negative sleeps
+                secs = (uint32_t) d;
+              }
+              ESP_LOGI("espresso", "Reported to HA; sleeping %u s until next check", secs);
+              id(deep_sleep_1).set_sleep_duration(secs * 1000UL);
+          - deep_sleep.enter: deep_sleep_1
+
+ota:
+  platform: esphome
+
+logger:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    timezone: America/Los_Angeles    # Pacific; computes 06:45/12:30 in local time
+
+# Wakes are clock-scheduled by the on_client_connected logic above.
+# run_duration is a safety net so the device still sleeps if HA never connects;
+# sleep_duration here is only the fallback duration used in that failure case.
+deep_sleep:
+  id: deep_sleep_1
+  run_duration: 60s
+  sleep_duration: 1h
+
+switch:
+  # Drives GPIO6 HIGH on boot -> powers the XKC's VCC only while awake.
+  - platform: gpio
+    pin: GPIO6           # pad 6 -> sensor VCC
+    id: sensor_power
+    restore_mode: ALWAYS_ON
+    internal: true
+
+  # Turn ON during a wake window to keep the device awake (e.g. for USB-less
+  # OTA). Hard to catch with only two wakes/day -- USB is the reliable reflash.
+  - platform: template
+    name: "Espresso Prevent Sleep"
+    id: prevent_sleep
+    entity_category: config
+    optimistic: true
+    turn_on_action:
+      - deep_sleep.prevent: deep_sleep_1
+    turn_off_action:
+      - deep_sleep.allow: deep_sleep_1
+
+binary_sensor:
+  - platform: gpio
+    name: "Espresso Water Low"
+    id: espresso_water_low
+    device_class: problem        # shows as a "problem" in HA when ON
+    pin:
+      number: GPIO7              # pad 7
+      mode:
+        input: true
+        pullup: true             # NPN open-collector: pull-up gives a clean 3.3 V level
+    filters:
+      - delayed_on: 500ms        # debounce + let the XKC settle after power-up
+      - delayed_off: 500ms
+      # - invert:                # UNCOMMENT if ON/OFF reads reversed (NPN polarity)
+
+# --- Optional battery monitoring (needs an external divider from BAT to A0) ---
+# sensor:
+#   - platform: adc
+#     pin: GPIO2                 # A0
+#     name: "Espresso Battery Voltage"
+#     attenuation: 12db
+#     filters:
+#       - multiply: 2.0          # if using a 100k/100k divider on BAT
