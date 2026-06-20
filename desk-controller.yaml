@@ -313,7 +313,7 @@ script:
             - switch.turn_off: desk_down_button
             - delay: 0.5s
             - switch.turn_on: desk_up_button
-            - delay: 0.5s
+            - delay: 1.0s
             - switch.turn_off: desk_up_button
             - logger.log: "Desk lowered successfully."
             - light.turn_on:
