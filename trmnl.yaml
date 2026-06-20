@@ -218,7 +218,7 @@ font:
     size: 104
     glyphs:
       - "\U0000f8aa" # potted_plant (dry plant) - Material Symbols
-  - file: "fonts/GoogleSans-BoldItalic.ttf"
+  - file: "fonts/GoogleSans-Bold.ttf"
     id: quote_font
     size: 16
     glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
@@ -1244,7 +1244,7 @@ display:
         int idx = now.is_valid() ? ((now.day_of_month - 1 + (now.month - 1) * 31) % n) : 0;
         std::string q = quotes[idx];
 
-        // Word-wrap to ~65 chars per line (bold italic is wider), 3 lines max
+        // Word-wrap to ~65 chars per line, 3 lines max
         std::string l1, l2, l3;
         const int max_ch = 65;
         auto wrap_next = [&](std::string &line, std::string &remaining) {
@@ -1275,11 +1275,11 @@ display:
 
         // Render: skip empty lines, always show l3 and attribution
         if (!l1.empty())
-          it.printf(center_x, 356, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l1.c_str());
+          it.printf(center_x, 372, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l1.c_str());
         if (!l2.empty())
-          it.printf(center_x, 376, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l2.c_str());
-        it.printf(center_x, 396, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l3.c_str());
-        it.printf(scr_w - 20, 418, id(quote_font), TextAlign::BOTTOM_RIGHT, "-- by Jack Handey");
+          it.printf(center_x, 392, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l2.c_str());
+        it.printf(center_x, 412, id(quote_font), TextAlign::BOTTOM_CENTER, "%s", l3.c_str());
+        it.printf(scr_w - 20, 426, id(quote_font), TextAlign::BOTTOM_RIGHT, "-- by Jack Handey");
       }
 
       // --- Row 6: Bottom row - Battery % (right) and last updated time (left) (tiny font) ---
