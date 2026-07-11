@@ -168,6 +168,18 @@ binary_sensor:
     device_class: occupancy
 
 sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "Uptime"
+    id: uptime_sensor
+    update_interval: 60s
+    entity_category: diagnostic
+
   - platform: ld2450
     ld2450_id: ld2450_radar
     target_count:
@@ -225,7 +237,15 @@ sensor:
               args: ['x / 304.8']
               level: INFO
 
+debug:
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
+      id: reset_reason
+      entity_category: diagnostic
+
   - platform: template
     name: "Movement Direction"
     id: movement_direction
