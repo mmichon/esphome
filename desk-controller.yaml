@@ -213,17 +213,36 @@ globals:
     restore_value: false
     initial_value: '0'
 
+interval:
+  - interval: 30min
+    then:
+      - if:
+          condition:
+            and:
+              - api.connected:
+              - lambda: 'return !id(desk_occupancy).has_state();'
+              - lambda: 'return (millis() - id(last_notification_millis)) > 21600000UL;'  # throttle to once per 6h
+          then:
+            - lambda: 'id(last_notification_millis) = millis();'
+            - homeassistant.service:
+                service: notify.all_mike_devices
+                data:
+                  message: "⚠️ Desk Controller: occupancy sensor 'binary_sensor.office_occupancy' has never reported a state — it may have been renamed or removed in Home Assistant. The desk will not raise/lower until desk-controller.yaml is updated to match."
+
 script:
   - id: notify_desk_error_unavailable
     then:
       - if:
           condition:
-            api.connected:
+            and:
+              - api.connected:
+              - lambda: 'return (millis() - id(last_notification_millis)) > 21600000UL;'  # throttle to once per 6h
           then:
+            - lambda: 'id(last_notification_millis) = millis();'
             - homeassistant.service:
                 service: notify.all_mike_devices
                 data:
-                  message: "‼️ Unable to set desk height because in-law occupancy sensor is unavailable."
+                  message: "‼️ Unable to set desk height: occupancy sensor 'binary_sensor.office_occupancy' is unavailable (may have been renamed/removed in Home Assistant)."
 
   - id: notify_desk_error_no_occupancy
     then:
@@ -234,7 +253,7 @@ script:
             - homeassistant.service:
                 service: notify.all_mike_devices
                 data:
-                  message: "‼️ Unable to set desk height because in-law occupancy is not detected."
+                  message: "‼️ Unable to set desk height because office occupancy is not detected."
 
   - id: show_error_led
     then:
