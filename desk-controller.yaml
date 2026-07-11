@@ -148,7 +148,7 @@ binary_sensor:
       - switch.toggle: desk_raised
 
   - platform: homeassistant
-    entity_id: binary_sensor.in_law_occupancy
+    entity_id: binary_sensor.office_occupancy
     id: desk_occupancy
     internal: true
 
