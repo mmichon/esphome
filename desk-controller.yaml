@@ -259,6 +259,21 @@ script:
                 data:
                   message: "‼️ Unable to set desk height because office occupancy is not detected."
 
+  - id: notify_lower_blocked_offer_override
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.service:
+                service: notify.mobile_app_mikes_iphone
+                data:
+                  title: "Desk won't lower — nobody detected"
+                  message: "Office occupancy not detected, so the desk was not lowered."
+                data_template:
+                  data: >-
+                    {{ {'actions': [{'action': 'OVERRIDE_LOWER_DESK', 'title': 'Lower Anyway'}], 'push': {'sound': {'name': 'default', 'critical': 1, 'volume': 1}}} }}
+
   - id: show_error_led
     then:
       - light.turn_on:
@@ -319,6 +334,34 @@ script:
                 else:
                   - script.execute: notify_desk_error_unavailable
 
+  - id: do_lower_desk
+    mode: restart
+    then:
+      - script.stop: raise_desk_script
+      - logger.log: "Lowering desk..."
+      - light.turn_on:
+          id: rgb_led
+          effect: "Movement Strobe"
+      - switch.turn_on: desk_down_button
+      - delay: 15.2s
+      - switch.turn_off: desk_down_button
+      - delay: 0.5s
+      - switch.turn_on: desk_up_button
+      - delay: 1.0s
+      - switch.turn_off: desk_up_button
+      - logger.log: "Desk lowered successfully."
+      - light.turn_on:
+          id: rgb_led
+          effect: "None"
+      - light.turn_on:
+          id: rgb_led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 100%
+          transition_length: 0.2s
+      - lambda: 'id(desk_raised).publish_state(false);'
+
   - id: lower_desk_script
     mode: restart
     then:
@@ -328,27 +371,7 @@ script:
             lambda: 'return id(desk_occupancy).has_state() && id(desk_occupancy).state;'
           then:
             - logger.log: "Lowering desk (occupancy detected)..."
-            - light.turn_on:
-                id: rgb_led
-                effect: "Movement Strobe"
-            - switch.turn_on: desk_down_button
-            - delay: 15.2s
-            - switch.turn_off: desk_down_button
-            - delay: 0.5s
-            - switch.turn_on: desk_up_button
-            - delay: 1.0s
-            - switch.turn_off: desk_up_button
-            - logger.log: "Desk lowered successfully."
-            - light.turn_on:
-                id: rgb_led
-                effect: "None"
-            - light.turn_on:
-                id: rgb_led
-                red: 0%
-                green: 100%
-                blue: 0%
-                brightness: 100%
-                transition_length: 0.2s
+            - script.execute: do_lower_desk
           else:
             - logger.log: "Cannot lower desk: occupancy sensor check failed"
             - switch.turn_on: desk_raised
@@ -357,6 +380,6 @@ script:
                 condition:
                   lambda: 'return id(desk_occupancy).has_state();'
                 then:
-                  - script.execute: notify_desk_error_no_occupancy
+                  - script.execute: notify_lower_blocked_offer_override
                 else:
                   - script.execute: notify_desk_error_unavailable
