@@ -46,6 +46,7 @@ wifi:
   password: !secret wifi_password
   fast_connect: true
   reboot_timeout: 15min
+  power_save_mode: none
 
 globals:
   - id: api_client_count
