@@ -33,18 +33,12 @@ esphome:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: binary_sensor.upstairs_entry_contact
+      # upstairs_entry_contact and wyzesense_patio_door (interior doors) no longer
+      # displayed, so they are not fetched on wake.
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.wifi_door_3
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: binary_sensor.wyzesense_patio_door
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -315,18 +309,12 @@ script:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: binary_sensor.upstairs_entry_contact
+      # upstairs_entry_contact and wyzesense_patio_door (interior doors) no longer
+      # displayed, so they are not fetched on wake.
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.wifi_door_3
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
-            entity_id: binary_sensor.wyzesense_patio_door
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -811,14 +799,10 @@ display:
       // Cache door states once - reuse for both status text and icon display
       bool has_garage_door = id(garage_door).has_state();
       bool garage_door_open = has_garage_door && strcmp(id(garage_door).state.c_str(), "open") == 0;
-      bool has_entry_door = id(entry_door).has_state();
-      bool entry_door_open = has_entry_door && id(entry_door).state;
+      // Entry (entry_door) and In-law (inlaw_door) are interior doors — not
+      // shown on the dashboard, so their states are no longer computed.
       bool has_upstairs_patio = id(upstairs_patio_door).has_state();
       bool upstairs_patio_open = has_upstairs_patio && id(upstairs_patio_door).state;
-      bool has_inlaw_door = id(inlaw_door).has_state();
-      bool inlaw_door_open = has_inlaw_door && id(inlaw_door).state;
-      // Use same sensor for both inlaw door and patio (they're the same entity)
-      bool inlaw_patio_open = inlaw_door_open;
       bool has_garage_entry = id(garage_entry_door).has_state();
       bool garage_entry_open = has_garage_entry && id(garage_entry_door).state;
       bool has_garage_lock = id(garage_lock).has_state();
@@ -914,17 +898,10 @@ display:
         if (garage_door_open) {
           open_items.push_back("Garage");
         }
-        if (entry_door_open) {
-          open_items.push_back("Entry");
-        }
+        // Entry (upstairs_entry_contact) and In-law (wyzesense_patio_door) are
+        // interior doors — intentionally not reported here.
         if (upstairs_patio_open) {
           open_items.push_back("Patio");
-        }
-        if (inlaw_door_open) {
-          open_items.push_back("In-law");
-        }
-        if (inlaw_patio_open) {
-          open_items.push_back("In-law Patio");
         }
         if (garage_entry_open) {
           open_items.push_back("Garage Entry");
@@ -1029,8 +1006,9 @@ display:
         }
 
         // Open door icon - show if at least one door or window is open using cached door states
-        show_door = garage_door_open || entry_door_open || upstairs_patio_open ||
-                    inlaw_door_open || garage_entry_open || garage_unlocked;
+        // Entry and In-law are interior doors and intentionally excluded.
+        show_door = garage_door_open || upstairs_patio_open ||
+                    garage_entry_open || garage_unlocked;
         if (show_door) {
           icon_count++;
         }
