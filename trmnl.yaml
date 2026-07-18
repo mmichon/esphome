@@ -270,6 +270,10 @@ globals:
     type: std::string
     restore_value: no
     initial_value: ""
+  - id: keep_awake
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
 script:
   - id: queue_display_refresh
@@ -341,6 +345,13 @@ script:
     mode: restart
     then:
       - delay: 100ms
+      - lambda: |-
+          // "Update on next wake" toggle: skip sleeping entirely so an OTA can be
+          // pushed to the awake device (software replacement for holding KEEP_AWAKE).
+          if (id(keep_awake)) {
+            id(managed_sleep).prevent_deep_sleep();  // belt-and-suspenders
+            return;
+          }
       - lambda: |-
           // If we're in the night window (midnight–7am), sleep until 7:00am instead of
           // the default 60min. This eliminates ~12 unnecessary wake cycles per night.
@@ -553,6 +564,21 @@ binary_sensor:
             if (id(initial_data_loaded)) {
               id(queue_display_refresh).execute();
             }
+  - platform: homeassistant
+    id: update_on_wake
+    entity_id: input_boolean.trmnl_update_on_next_wake
+    on_state:
+      then:
+        - if:
+            condition:
+              lambda: 'return x;'
+            then:
+              - lambda: 'id(keep_awake) = true;'
+              # One-shot: clear the toggle in HA so the post-OTA reboot sleeps normally
+              - homeassistant.service:
+                  service: input_boolean.turn_off
+                  data:
+                    entity_id: input_boolean.trmnl_update_on_next_wake
   - platform: homeassistant
     id: package_sensor
     entity_id: input_boolean.package_detected
