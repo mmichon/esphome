@@ -33,8 +33,8 @@ esphome:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      # upstairs_entry_contact and wyzesense_patio_door (interior doors) no longer
-      # displayed, so they are not fetched on wake.
+      # wyzesense_patio_door (interior door) no longer displayed, so not fetched.
+      # Trash Bin lid + front door are fetched so the "Trash Bin" open warning is fresh.
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -43,6 +43,14 @@ esphome:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.garage_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.trash_bin_lid
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.trash_bin_front_door
       # Calendar events and banner text removed from boot fetch - use cached values
       # These update automatically via Home Assistant API when they change, saving 3 API calls per wake
       - homeassistant.service:
@@ -313,8 +321,8 @@ script:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      # upstairs_entry_contact and wyzesense_patio_door (interior doors) no longer
-      # displayed, so they are not fetched on wake.
+      # wyzesense_patio_door (interior door) no longer displayed, so not fetched.
+      # Trash Bin lid + front door are fetched so the "Trash Bin" open warning is fresh.
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
@@ -323,6 +331,14 @@ script:
           service: homeassistant.update_entity
           data:
             entity_id: binary_sensor.garage_entry_contact
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.trash_bin_lid
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: binary_sensor.trash_bin_front_door
       # Calendar events and banner text removed from retry fetch - use cached values
       # These update automatically via Home Assistant API when they change, saving 3 API calls per retry
       - homeassistant.service:
@@ -509,8 +525,17 @@ button:
 
 binary_sensor:
   - platform: homeassistant
-    id: entry_door
-    entity_id: binary_sensor.upstairs_entry_contact
+    id: trash_bin_lid
+    entity_id: binary_sensor.trash_bin_lid
+    on_state:
+      then:
+        - lambda: |-
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  - platform: homeassistant
+    id: trash_bin_front
+    entity_id: binary_sensor.trash_bin_front_door
     on_state:
       then:
         - lambda: |-
@@ -825,12 +850,15 @@ display:
       // Cache door states once - reuse for both status text and icon display
       bool has_garage_door = id(garage_door).has_state();
       bool garage_door_open = has_garage_door && strcmp(id(garage_door).state.c_str(), "open") == 0;
-      // Entry (entry_door) and In-law (inlaw_door) are interior doors — not
-      // shown on the dashboard, so their states are no longer computed.
+      // In-law (inlaw_door) is an interior door — not shown on the dashboard.
       bool has_upstairs_patio = id(upstairs_patio_door).has_state();
       bool upstairs_patio_open = has_upstairs_patio && id(upstairs_patio_door).state;
       bool has_garage_entry = id(garage_entry_door).has_state();
       bool garage_entry_open = has_garage_entry && id(garage_entry_door).state;
+      // Trash Bin storage box — lid or front door open means the bin is open
+      // (possible package delivery, or someone handling the bins).
+      bool trash_bin_open = (id(trash_bin_lid).has_state() && id(trash_bin_lid).state) ||
+                            (id(trash_bin_front).has_state() && id(trash_bin_front).state);
       bool has_garage_lock = id(garage_lock).has_state();
       bool garage_unlocked = has_garage_lock && strcmp(id(garage_lock).state.c_str(), "unlocked") == 0;
 
@@ -924,13 +952,15 @@ display:
         if (garage_door_open) {
           open_items.push_back("Garage");
         }
-        // Entry (upstairs_entry_contact) and In-law (wyzesense_patio_door) are
-        // interior doors — intentionally not reported here.
+        // In-law (wyzesense_patio_door) is an interior door — not reported here.
         if (upstairs_patio_open) {
           open_items.push_back("Patio");
         }
         if (garage_entry_open) {
           open_items.push_back("Garage Entry");
+        }
+        if (trash_bin_open) {
+          open_items.push_back("Trash Bin");
         }
 
         // Add garage unlocked warning using cached state
@@ -1034,7 +1064,7 @@ display:
         // Open door icon - show if at least one door or window is open using cached door states
         // Entry and In-law are interior doors and intentionally excluded.
         show_door = garage_door_open || upstairs_patio_open ||
-                    garage_entry_open || garage_unlocked;
+                    garage_entry_open || garage_unlocked || trash_bin_open;
         if (show_door) {
           icon_count++;
         }
