@@ -599,6 +599,11 @@ binary_sensor:
               lambda: 'return x;'
             then:
               - lambda: 'id(keep_awake) = true;'
+              - if:
+                  condition:
+                    lambda: 'return id(initial_data_loaded);'
+                  then:
+                    - lambda: 'id(queue_display_refresh).execute();'
               # One-shot: clear the toggle in HA so the post-OTA reboot sleeps normally
               - homeassistant.service:
                   service: input_boolean.turn_off
@@ -942,7 +947,10 @@ display:
       // --- Row 3: Open doors/windows and lights status (status font) ---
       std::string status_text;
 
-      if (debug_mode_enabled) {
+      if (id(keep_awake)) {
+        // Staying awake for an OTA push - make that obvious on the display
+        status_text = "WAITING FOR UPDATE";
+      } else if (debug_mode_enabled) {
         // Debug mode: show test values
         status_text = "test door is open • lights: 100";
       } else {
