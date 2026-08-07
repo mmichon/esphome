@@ -42,10 +42,6 @@ esphome:
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
-            entity_id: binary_sensor.garage_entry_contact
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
             entity_id: binary_sensor.trash_bin_lid
       - homeassistant.service:
           service: homeassistant.update_entity
@@ -330,10 +326,6 @@ script:
       - homeassistant.service:
           service: homeassistant.update_entity
           data:
-            entity_id: binary_sensor.garage_entry_contact
-      - homeassistant.service:
-          service: homeassistant.update_entity
-          data:
             entity_id: binary_sensor.trash_bin_lid
       - homeassistant.service:
           service: homeassistant.update_entity
@@ -562,15 +554,6 @@ binary_sensor:
             }
   # Removed duplicate inlaw_patio_door sensor - it uses the same entity as inlaw_door
   # Display code now uses inlaw_door for both "In-law" and "In-law Patio" status
-  - platform: homeassistant
-    id: garage_entry_door
-    entity_id: binary_sensor.garage_entry_contact
-    on_state:
-      then:
-        - lambda: |-
-            if (id(initial_data_loaded)) {
-              id(queue_display_refresh).execute();
-            }
   - platform: homeassistant
     id: guest_mode
     entity_id: input_boolean.guest_mode
@@ -858,8 +841,6 @@ display:
       // In-law (inlaw_door) is an interior door — not shown on the dashboard.
       bool has_upstairs_patio = id(upstairs_patio_door).has_state();
       bool upstairs_patio_open = has_upstairs_patio && id(upstairs_patio_door).state;
-      bool has_garage_entry = id(garage_entry_door).has_state();
-      bool garage_entry_open = has_garage_entry && id(garage_entry_door).state;
       // Trash Bin storage box — lid or front door open means the bin is open
       // (possible package delivery, or someone handling the bins).
       bool trash_bin_open = (id(trash_bin_lid).has_state() && id(trash_bin_lid).state) ||
@@ -963,9 +944,6 @@ display:
         // In-law (wyzesense_patio_door) is an interior door — not reported here.
         if (upstairs_patio_open) {
           open_items.push_back("Patio");
-        }
-        if (garage_entry_open) {
-          open_items.push_back("Garage Entry");
         }
         if (trash_bin_open) {
           open_items.push_back("Trash Bin");
@@ -1072,7 +1050,7 @@ display:
         // Open door icon - show if at least one door or window is open using cached door states
         // Entry and In-law are interior doors and intentionally excluded.
         show_door = garage_door_open || upstairs_patio_open ||
-                    garage_entry_open || garage_unlocked || trash_bin_open;
+                    garage_unlocked || trash_bin_open;
         if (show_door) {
           icon_count++;
         }
