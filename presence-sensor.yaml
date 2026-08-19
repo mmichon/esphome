@@ -12,8 +12,17 @@
 #
 # RGB LED Status Indicators:
 # --------------------------
-# Blinking orange   : not connected to Home Assistant
-# Off               : connected to Home Assistant
+# Blinking orange   : not connected to Home Assistant (400ms period, continuous)
+# Off               : connected to Home Assistant (idle)
+#
+# RGB LED Scene Cues (fired by HA via the flash_scene_cue action, 3 quick flashes):
+# --------------------------------------------------------------------------------
+# Green             : about to enter Couch mode  (the couch is green)
+# Beige             : about to enter Desk/working mode
+# Orange            : about to enter Shared mode (couch + desk)
+#
+# The cue is a short burst, distinct from the continuous disconnect blink; the two
+# can never collide because a disconnected device cannot receive the HA action.
 #
 # =============================================================================
 
@@ -78,6 +87,22 @@ api:
   encryption:
     key: !secret api_encryption_key
   reboot_timeout: 0s
+  actions:
+    # Called from HA (esphome.espkitchen_flash_scene_cue) just before a living-room
+    # scene change, so the LED announces which scene is coming.
+    - action: flash_scene_cue
+      variables:
+        red: float
+        green: float
+        blue: float
+        times: int
+      then:
+        - script.execute:
+            id: scene_cue
+            red: !lambda 'return red;'
+            green: !lambda 'return green;'
+            blue: !lambda 'return blue;'
+            times: !lambda 'return times;'
   on_client_connected:
     - lambda: id(api_client_count) = id(api_client_count) + 1;
   on_client_disconnected:
@@ -141,6 +166,40 @@ light:
       - output.turn_on: rgb_power
     on_turn_off:
       - output.turn_off: rgb_power
+
+script:
+  # Flash the onboard WS2812 a given colour N times, then leave it off again.
+  # Safe to run while connected to HA: the 100ms status interval early-returns
+  # (last_blink_state is already 0) and never fights this.
+  - id: scene_cue
+    mode: restart
+    parameters:
+      red: float
+      green: float
+      blue: float
+      times: int
+    then:
+      - logger.log:
+          format: "Scene cue: %.2f/%.2f/%.2f x%d"
+          args: [red, green, blue, times]
+          level: INFO
+      - repeat:
+          count: !lambda 'return times;'
+          then:
+            - lambda: |-
+                auto call = id(rgb_led).turn_on();
+                call.set_transition_length(0);
+                call.set_brightness(1.0f);
+                call.set_rgb(red, green, blue);
+                call.perform();
+            - delay: 180ms
+            - lambda: |-
+                auto call = id(rgb_led).turn_on();
+                call.set_transition_length(0);
+                call.set_brightness(0.0f);
+                call.set_rgb(0.0f, 0.0f, 0.0f);
+                call.perform();
+            - delay: 180ms
 
 binary_sensor:
   - platform: ld2450
