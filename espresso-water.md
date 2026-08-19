@@ -74,7 +74,7 @@ inline meter on the battery — that's the wild card.)
 
 ## Home Assistant
 
-- **Adopted** via the ESPHome integration — host `espresso.local` / `10.0.0.48`,
+- **Adopted** via the ESPHome integration — host `espresso.local`,
   port `6053`, encryption key = `!secret api_encryption_key` (shared by all
   ESPHome devices here).
 - **Entity:** `binary_sensor.espresso_water_espresso_water_low`

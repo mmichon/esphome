@@ -29,7 +29,7 @@ deep_sleep:
   sleep_duration: "5 min"
 logger:
 mqtt:
-  broker: "10.0.0.2"
+  broker: "REDACTED"
   discovery: False
   discovery_retain: False
   # on_disconnect:

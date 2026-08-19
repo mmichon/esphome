@@ -114,8 +114,8 @@ wifi:
   # Removed redundant on_connect entity fetches - boot sequence already fetches all entities
   # This saves 17 API calls per wake cycle since WiFi connects fresh each time from deep sleep
   manual_ip:
-    static_ip: 10.0.0.200
-    gateway: 10.0.0.1
+    static_ip: !secret trmnl_static_ip
+    gateway: !secret wifi_gateway
     subnet: 255.255.255.0
 
 # Captive portal disabled - not needed for battery-powered device with deep sleep

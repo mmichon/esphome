@@ -26,11 +26,11 @@ wifi:
   password: !secret wifi_password
   fast_connect: true
   manual_ip:
-    static_ip: 10.0.0.124
-    gateway: 10.0.0.1
+    static_ip: REDACTED
+    gateway: REDACTED
     subnet: 255.255.255.0
 mqtt:
-  broker: "10.0.0.2"
+  broker: "REDACTED"
   discovery: False
   discovery_retain: False
 ota:
