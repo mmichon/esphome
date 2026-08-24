@@ -18,13 +18,15 @@ esphome:
     - priority: 600
       then:
         - lock.unlock: garage_lock
-    - priority: -100
-      then:
-        - if:
-            condition:
-              binary_sensor.is_on: garage_contact_sensor
-            then:
-              - script.execute: garage_auto_close_timer
+    # NOTE: a `priority: -100` on_boot hook used to start garage_auto_close_timer
+    # whenever the contact sensor read "open" at boot. Removed 2026-08-24: on
+    # 2026-08-21 the contact sensor had fallen off and read a permanent "open", so a
+    # whole-house power cycle at ~01:46 rebooted this node, the hook fired, and 920s
+    # later it unlocked the deadbolt and pulsed the opener at ~02:01 with no HA
+    # involvement, no notification and no way to cancel. A boot is exactly when this
+    # device has the least trustworthy information. garage_auto_close_timer now only
+    # ever starts from a genuine closed->open transition (binary_sensor on_press),
+    # which a stuck sensor cannot produce.
 
 esp8266:
   board: nodemcuv2
