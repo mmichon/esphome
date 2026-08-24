@@ -7,6 +7,30 @@
 # orange | D1 | GPIO5  | garage_contact_sensor (input)
 # brown  |    | GND    | shared ground
 # (D4/GPIO2 = status LED, built-in)
+#
+# SAFETY MODEL (rewritten 2026-08-24 after the 2026-08-21 incident)
+# -----------------------------------------------------------------
+# The garage opener is a *momentary toggle*: open and close are the same 500 ms
+# relay pulse. There is exactly one witness to door position (garage_contact_sensor),
+# and cover.garage_door is a pure function of it. So a pulse issued while that
+# sensor is wrong does not "fail safe" -- it opens the house.
+#
+# 2026-08-21: the reed switch fell off, freezing the contact at "open". A utility
+# power cycle at ~01:46 rebooted this node; an `on_boot: priority: -100` hook saw
+# "open" and armed garage_auto_close_timer; at ~02:01 it unlocked the deadbolt and
+# pulsed the opener against an already-closed door. The garage stood open all night.
+# There was no HA involvement, no notification, and no way to cancel.
+#
+# Three rules now hold on this device:
+#   1. Never pulse the opener based on state observed at boot. A boot is when this
+#      node knows the least. The auto-close fallback may only arm from a genuine
+#      closed->open edge seen *during this boot*, which a frozen sensor cannot produce.
+#   2. Every pulse is verified. If the contact does not change within 35 s, the
+#      sensor or the door is untrustworthy -- latch actuation_failed and refuse all
+#      further automatic pulses until a real transition proves the sensor is alive.
+#   3. Defaults are fail-secure. auto_close_active starts false (HA pushes the real
+#      value on connect) and the deadbolt is restored to its persisted position on
+#      boot rather than blindly retracted.
 
 substitutions:
   hostname: espgarage
@@ -15,32 +39,84 @@ esphome:
   name: ${hostname}
   friendly_name: Doors Controller
   on_boot:
+    # Restore the deadbolt to where it actually was, rather than forcing it open.
+    #
+    # The template lock has ZERO position feedback, which is why the old code just
+    # called `lock.unlock` here: after a reboot the node had no idea where the bolt
+    # was, and pulsing the opener against an extended bolt strains the opener motor.
+    # That solved the hardware problem by failing *open* on security -- every power
+    # blip retracted the deadbolt.
+    #
+    # Instead the bolt position is persisted to flash (see restore_from_flash below)
+    # and re-asserted here. Publishing state comes first so HA/HomeKit learn the truth
+    # even if we decline to move the actuator; re-extending an already-extended linear
+    # actuator is a harmless ~1 s stall.
     - priority: 600
       then:
-        - lock.unlock: garage_lock
+        - if:
+            condition:
+              lambda: 'return id(bolt_state_known) && id(bolt_extended);'
+            then:
+              - lock.template.publish:
+                  id: garage_lock
+                  state: LOCKED
+              # Only physically re-extend if the door reads closed -- same guard as
+              # lock_action, so we never drive the bolt into an open door.
+              - if:
+                  condition:
+                    binary_sensor.is_off: garage_contact_sensor
+                  then:
+                    - switch.turn_on: extend_lock
+                    - delay: 1s
+                    - switch.turn_off: extend_lock
+            else:
+              # No persisted position (genuine first boot after a flash/erase).
+              # Retract to establish a known state, as the old code always did.
+              - switch.turn_on: retract_lock
+              - delay: 2s
+              - switch.turn_off: retract_lock
+              - lock.template.publish:
+                  id: garage_lock
+                  state: UNLOCKED
+              - globals.set:
+                  id: bolt_state_known
+                  value: 'true'
+              - globals.set:
+                  id: bolt_extended
+                  value: 'false'
+
     # NOTE: a `priority: -100` on_boot hook used to start garage_auto_close_timer
-    # whenever the contact sensor read "open" at boot. Removed 2026-08-24: on
-    # 2026-08-21 the contact sensor had fallen off and read a permanent "open", so a
-    # whole-house power cycle at ~01:46 rebooted this node, the hook fired, and 920s
-    # later it unlocked the deadbolt and pulsed the opener at ~02:01 with no HA
-    # involvement, no notification and no way to cancel. A boot is exactly when this
-    # device has the least trustworthy information. garage_auto_close_timer now only
-    # ever starts from a genuine closed->open transition (binary_sensor on_press),
-    # which a stuck sensor cannot produce.
+    # whenever the contact sensor read "open" at boot. Removed 2026-08-24 -- it is
+    # the direct cause of the 2026-08-21 incident described in the header. Do not
+    # reintroduce any on_boot hook that actuates the opener.
 
 esp8266:
   board: nodemcuv2
+  # Required for `restore_value: yes` globals to survive a *power loss* (RTC memory
+  # alone does not). Only the two bolt-position globals persist, and the bolt moves
+  # a few times a day at most, so flash wear is not a concern.
+  restore_from_flash: true
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-captive_portal:
+# Deliberately omitted: `captive_portal:`. When Wi-Fi failed it raised an open,
+# unauthenticated AP named "espgarage" exposing this node's control surface --
+# and Wi-Fi failing is exactly the moment nobody is watching. Removed 2026-08-24.
 
 logger:
+
 ota:
-    platform: esphome
+  - platform: esphome
+    password: !secret espgarage_ota_password
+
 web_server:
+  # Was unauthenticated until 2026-08-24: any host on the LAN could open the garage
+  # with `curl http://espgarage.local/cover/garage_door/open`.
+  auth:
+    username: !secret espgarage_web_user
+    password: !secret espgarage_web_password
 
 status_led:
   pin:
@@ -48,37 +124,100 @@ status_led:
     inverted: true
 
 globals:
+  # Mirrors input_boolean.garage_auto_close, pushed by HA (see the homeassistant
+  # binary_sensor below). Starts FALSE: it used to start true, so a power restore
+  # re-armed the on-device auto-close before HA could push the real value -- fail-open
+  # at precisely the wrong moment. HA re-pushes within seconds of the API connecting,
+  # and saw_open_edge_this_boot means the fallback has nothing to do before then.
   - id: auto_close_active
     type: bool
     restore_value: no
-    initial_value: 'true'
+    initial_value: 'false'
+
+  # Set only by a genuine closed->open edge observed during this boot. A frozen
+  # sensor cannot produce one, and a power cut clears it. This is what makes the
+  # on-device fallback safe without a second witness sensor.
+  - id: saw_open_edge_this_boot
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # millis() of that edge, for the recency ceiling in garage_auto_close_timer.
+  - id: open_edge_millis
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Latched when a pulse did not move the door. Blocks all *automatic* pulses until
+  # a real contact transition clears it. Surfaced to HA as a `problem` binary_sensor.
+  - id: actuation_failed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # Contact state captured just before a pulse, compared against by verify_movement.
+  - id: contact_before_pulse
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  # Deadbolt position, persisted across power loss so on_boot can restore rather
+  # than retract. bolt_state_known distinguishes "unlocked" from "never seen".
+  - id: bolt_state_known
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: bolt_extended
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
 
 sensor:
-  # - platform: wifi_signal
-  #   name: Door Controller WiFi Strength
-  #   update_interval: 60s
-  # - platform: uptime
-  #   name: Door Controller Uptime
-  # - platform: ultrasonic
-  #   trigger_pin: D2
-  #   echo_pin: D1
-  #   name: "Car Ultrasonic Sensor"
+  # Lets HA tell a settled node from one that just rebooted, so the HA-side
+  # `garage_state_trustworthy` gate can refuse to act on a node that is still
+  # coming up after a power event.
+  - platform: uptime
+    name: "Uptime"
+    id: node_uptime
+    update_interval: 60s
 
 binary_sensor:
   - platform: gpio
     name: "147 Garage Contact"
     id: garage_contact_sensor
     device_class: garage_door
-    #pin: 12
     pin:
       number: 5 #D1
       inverted: True
       mode: INPUT_PULLUP
+    # Added 2026-08-24. Without debounce, contact bounce or a vibrating door panel
+    # can synthesize a closed->open edge, which is now a *privileged* event: it arms
+    # the auto-close fallback and clears the actuation_failed latch.
+    filters:
+      - delayed_on: 500ms
+      - delayed_off: 500ms
     internal: false
     on_press:
+      # Genuine open edge: the sensor is demonstrably alive and the door really moved.
+      - globals.set:
+          id: saw_open_edge_this_boot
+          value: 'true'
+      - lambda: 'id(open_edge_millis) = millis();'
+      - script.execute: clear_actuation_failed
       - script.execute: garage_auto_close_timer
     on_release:
+      - globals.set:
+          id: saw_open_edge_this_boot
+          value: 'false'
+      - script.execute: clear_actuation_failed
       - script.stop: garage_auto_close_timer
+
+  - platform: template
+    name: "Garage Actuation Failed"
+    id: garage_actuation_failed_bs
+    device_class: problem
+    lambda: 'return id(actuation_failed);'
+
   - platform: homeassistant
     id: ha_garage_auto_close
     entity_id: input_boolean.garage_auto_close
@@ -117,24 +256,77 @@ switch:
     restore_mode: ALWAYS_OFF
 
 script:
+  - id: clear_actuation_failed
+    mode: single
+    then:
+      - globals.set:
+          id: actuation_failed
+          value: 'false'
+      - binary_sensor.template.publish:
+          id: garage_actuation_failed_bs
+          state: false
+
+  # Raw actuator. Retracts the deadbolt if needed, then pulses the opener button.
+  # Every caller must already have decided the pulse is safe.
+  - id: pulse_opener
+    mode: single
+    then:
+      - if:
+          condition:
+            lock.is_locked: garage_lock
+          then:
+            - lock.unlock: garage_lock
+            - delay: 2.5s
+      - switch.turn_on: garage_button_relay
+
+  # Run alongside every pulse. Snapshots the contact, waits out the door's travel,
+  # and latches actuation_failed if nothing moved -- meaning either the door did not
+  # respond or the sensor is lying. Either way this node must stop pulsing blind.
+  # mode: restart so a rapid second command re-arms the window instead of being
+  # measured against a stale snapshot.
+  - id: verify_movement
+    mode: restart
+    then:
+      - lambda: 'id(contact_before_pulse) = id(garage_contact_sensor).state;'
+      - delay: 35s
+      - if:
+          condition:
+            lambda: 'return id(garage_contact_sensor).state == id(contact_before_pulse);'
+          then:
+            - logger.log:
+                level: WARN
+                format: "Opener pulsed but the contact never changed -- latching actuation_failed. Sensor or door is untrustworthy."
+            - globals.set:
+                id: actuation_failed
+                value: 'true'
+            - binary_sensor.template.publish:
+                id: garage_actuation_failed_bs
+                state: true
+
+  # On-device auto-close fallback, for when HA is down. Kept deliberately dumber and
+  # more suspicious than the HA-side automation: it has no presence, camera, time-of-day
+  # or suspect-sensor context, so it compensates by demanding hard local evidence.
   - id: garage_auto_close_timer
     mode: restart
     then:
-      - delay: 900s
-      - delay: 20s
+      - delay: 920s
       - if:
           condition:
             and:
+              # Still reads open.
               - binary_sensor.is_on: garage_contact_sensor
+              # HA (or the default) says auto-close is wanted.
               - lambda: 'return id(auto_close_active);'
+              # We personally watched the door open during this boot.
+              - lambda: 'return id(saw_open_edge_this_boot);'
+              # No unexplained pulse outstanding.
+              - lambda: 'return !id(actuation_failed);'
+              # That opening was recent. Guards against a wedged timer or a sensor
+              # that froze "open" immediately after one real edge.
+              - lambda: 'return (millis() - id(open_edge_millis)) < 3600000UL;'
           then:
-            - if:
-                condition:
-                  lock.is_locked: garage_lock
-                then:
-                  - lock.unlock: garage_lock
-                  - delay: 2.5s
-            - switch.turn_on: garage_button_relay
+            - script.execute: verify_movement
+            - script.execute: pulse_opener
 
 cover:
   - platform: template
@@ -147,22 +339,16 @@ cover:
       } else {
         return COVER_CLOSED;
       }
+    # Attended commands (HA, HomeKit, the HA-side scripts) are allowed through even
+    # when actuation_failed is latched -- a person deciding to move the door is the
+    # thing that recovers from a stuck sensor. They are still verified, so a command
+    # that does not move the door re-latches and keeps the automatic paths disabled.
     open_action:
-      - if:
-          condition:
-            lock.is_locked: garage_lock
-          then:
-            - lock.unlock: garage_lock
-            - delay: 2.5s
-      - switch.turn_on: garage_button_relay
+      - script.execute: verify_movement
+      - script.execute: pulse_opener
     close_action:
-      - if:
-          condition:
-            lock.is_locked: garage_lock
-          then:
-            - lock.unlock: garage_lock
-            - delay: 2.5s
-      - switch.turn_on: garage_button_relay
+      - script.execute: verify_movement
+      - script.execute: pulse_opener
 
 lock:
   - platform: template
@@ -177,6 +363,12 @@ lock:
             - switch.turn_on: extend_lock
             - delay: 1sec
             - switch.turn_off: extend_lock
+            - globals.set:
+                id: bolt_state_known
+                value: 'true'
+            - globals.set:
+                id: bolt_extended
+                value: 'true'
             - lock.template.publish:
                 id: garage_lock
                 state: LOCKED
@@ -185,6 +377,12 @@ lock:
       - switch.turn_on: retract_lock
       - delay: 2sec
       - switch.turn_off: retract_lock
+      - globals.set:
+          id: bolt_state_known
+          value: 'true'
+      - globals.set:
+          id: bolt_extended
+          value: 'false'
       - lock.template.publish:
           id: garage_lock
           state: UNLOCKED
