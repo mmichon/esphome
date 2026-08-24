@@ -33,7 +33,7 @@ esphome:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      # The in-law interior door sensor (Wyze Sense) was removed 2026-08-24; nothing to fetch.
+      # wyzesense_patio_door (interior door) no longer displayed, so not fetched.
       # Trash Bin lid + front door are fetched so the "Trash Bin" open warning is fresh.
       - homeassistant.service:
           service: homeassistant.update_entity
@@ -317,7 +317,7 @@ script:
           service: homeassistant.update_entity
           data:
             entity_id: lock.garage_lock
-      # The in-law interior door sensor (Wyze Sense) was removed 2026-08-24; nothing to fetch.
+      # wyzesense_patio_door (interior door) no longer displayed, so not fetched.
       # Trash Bin lid + front door are fetched so the "Trash Bin" open warning is fresh.
       - homeassistant.service:
           service: homeassistant.update_entity
@@ -543,6 +543,17 @@ binary_sensor:
             if (id(initial_data_loaded)) {
               id(queue_display_refresh).execute();
             }
+  - platform: homeassistant
+    id: inlaw_door
+    entity_id: binary_sensor.wyzesense_patio_door
+    on_state:
+      then:
+        - lambda: |-
+            if (id(initial_data_loaded)) {
+              id(queue_display_refresh).execute();
+            }
+  # Removed duplicate inlaw_patio_door sensor - it uses the same entity as inlaw_door
+  # Display code now uses inlaw_door for both "In-law" and "In-law Patio" status
   - platform: homeassistant
     id: guest_mode
     entity_id: input_boolean.guest_mode
@@ -827,7 +838,7 @@ display:
       // Cache door states once - reuse for both status text and icon display
       bool has_garage_door = id(garage_door).has_state();
       bool garage_door_open = has_garage_door && strcmp(id(garage_door).state.c_str(), "open") == 0;
-      // In-law interior door: sensor removed 2026-08-24, no longer tracked.
+      // In-law (inlaw_door) is an interior door — not shown on the dashboard.
       bool has_upstairs_patio = id(upstairs_patio_door).has_state();
       bool upstairs_patio_open = has_upstairs_patio && id(upstairs_patio_door).state;
       // Trash Bin storage box — lid or front door open means the bin is open
@@ -930,7 +941,7 @@ display:
         if (garage_door_open) {
           open_items.push_back("Garage");
         }
-        // In-law interior door: sensor removed 2026-08-24, no longer reported.
+        // In-law (wyzesense_patio_door) is an interior door — not reported here.
         if (upstairs_patio_open) {
           open_items.push_back("Patio");
         }
