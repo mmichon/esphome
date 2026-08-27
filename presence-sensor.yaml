@@ -24,6 +24,19 @@
 # The cue is a short burst, distinct from the continuous disconnect blink; the two
 # can never collide because a disconnected device cannot receive the HA action.
 #
+# RGB LED Zone-Pending Blink (start_zone_pending / stop_zone_pending actions):
+# ---------------------------------------------------------------------------
+# Green, continuous : someone is detected in the couch zone or anywhere in the living
+#                     room, but the scene has not switched yet (HA debounces for a
+#                     minute). Same 180ms on/off cadence as the scene cue, but it
+#                     repeats until HA calls stop_zone_pending - which every living-room
+#                     mode does, via script.living_room_scene_cue, just before its own
+#                     cue burst. So the sequence you see is: blink, blink, blink...
+#                     -> stops -> 3-flash cue -> lights change.
+#
+# It self-terminates if HA disconnects (the disconnect blink takes the LED back) and
+# after 10 minutes regardless, so a missed stop can never leave it blinking forever.
+#
 # =============================================================================
 
 substitutions:
@@ -82,6 +95,14 @@ globals:
     type: std::string
     restore_value: false
     initial_value: '""'
+  - id: pending_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: pending_started_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
 
 api:
   encryption:
@@ -103,6 +124,34 @@ api:
             green: !lambda 'return green;'
             blue: !lambda 'return blue;'
             times: !lambda 'return times;'
+    # Called from HA (esphome.espkitchen_start_zone_pending) the moment a zone or the
+    # room as a whole picks someone up, well before any scene decision is made.
+    - action: start_zone_pending
+      variables:
+        red: float
+        green: float
+        blue: float
+      then:
+        - lambda: |-
+            id(pending_active) = true;
+            id(pending_started_ms) = millis();
+        - script.execute:
+            id: zone_pending
+            red: !lambda 'return red;'
+            green: !lambda 'return green;'
+            blue: !lambda 'return blue;'
+    # Called from HA (esphome.espkitchen_stop_zone_pending) once the scene actually
+    # switches, or once the room has been clear for a while.
+    - action: stop_zone_pending
+      then:
+        - lambda: 'id(pending_active) = false;'
+        - script.stop: zone_pending
+        - lambda: |-
+            auto call = id(rgb_led).turn_on();
+            call.set_transition_length(0);
+            call.set_brightness(0.0f);
+            call.set_rgb(0.0f, 0.0f, 0.0f);
+            call.perform();
   on_client_connected:
     - lambda: id(api_client_count) = id(api_client_count) + 1;
   on_client_disconnected:
@@ -200,6 +249,56 @@ script:
                 call.set_rgb(0.0f, 0.0f, 0.0f);
                 call.perform();
             - delay: 180ms
+
+  # Blink the onboard WS2812 continuously while HA says someone is detected but the
+  # scene has not switched yet. Same cadence as scene_cue, but open-ended. Two guards
+  # besides the HA stop: the blink yields if the API drops (the 100ms interval's
+  # disconnect blink owns the LED then), and it gives up after 10 minutes so a stop
+  # that never arrives - an automation reload mid-blink, say - cannot wedge the LED on.
+  - id: zone_pending
+    mode: restart
+    parameters:
+      red: float
+      green: float
+      blue: float
+    then:
+      - logger.log:
+          format: "Zone pending blink: %.2f/%.2f/%.2f"
+          args: [red, green, blue]
+          level: INFO
+      - while:
+          condition:
+            lambda: |-
+              return id(pending_active) && id(api_client_count) > 0 &&
+                     (millis() - id(pending_started_ms)) < 600000;
+          then:
+            - lambda: |-
+                auto call = id(rgb_led).turn_on();
+                call.set_transition_length(0);
+                call.set_brightness(1.0f);
+                call.set_rgb(red, green, blue);
+                call.perform();
+            - delay: 180ms
+            - lambda: |-
+                auto call = id(rgb_led).turn_on();
+                call.set_transition_length(0);
+                call.set_brightness(0.0f);
+                call.set_rgb(0.0f, 0.0f, 0.0f);
+                call.perform();
+            - delay: 180ms
+      - lambda: 'id(pending_active) = false;'
+      # Only take the LED dark if we are still connected - if the loop ended because the
+      # API dropped, the disconnect blink already owns the LED and must not be stomped.
+      - if:
+          condition:
+            lambda: 'return id(api_client_count) > 0;'
+          then:
+            - lambda: |-
+                auto call = id(rgb_led).turn_on();
+                call.set_transition_length(0);
+                call.set_brightness(0.0f);
+                call.set_rgb(0.0f, 0.0f, 0.0f);
+                call.perform();
 
 binary_sensor:
   - platform: ld2450
