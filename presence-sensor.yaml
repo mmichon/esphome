@@ -26,13 +26,23 @@
 #
 # RGB LED Zone-Pending Blink (start_zone_pending / stop_zone_pending actions):
 # ---------------------------------------------------------------------------
-# Green, continuous : someone is detected in the couch zone or anywhere in the living
-#                     room, but the scene has not switched yet (HA debounces for a
-#                     minute). Same 180ms on/off cadence as the scene cue, but it
-#                     repeats until HA calls stop_zone_pending - which every living-room
-#                     mode does, via script.living_room_scene_cue, just before its own
-#                     cue burst. So the sequence you see is: blink, blink, blink...
+# Continuous blink  : a zone has picked someone up and that implies a DIFFERENT
+#                     living-room mode than the one already running, but the scene has
+#                     not switched yet (HA debounces for a minute). The colour is the
+#                     incoming mode's, same palette as the cue burst below, so the two
+#                     match. Same 180ms on/off cadence as the scene cue, but it repeats
+#                     until HA calls stop_zone_pending - which every living-room mode
+#                     does, via script.living_room_scene_cue, just before its own cue
+#                     burst. So the sequence you see is: blink, blink, blink...
 #                     -> stops -> 3-flash cue -> lights change.
+#
+#                     HA decides all of this, in the living_room_led_pending_flash_*
+#                     automations: it compares sensor.living_room_pending_mode (from the
+#                     raw zone sensors) against sensor.living_room_mode (inferred from
+#                     the lights), and stops the blink 10s after the zones go clear.
+#                     Notably it does NOT key off the whole-room presence sensor - that
+#                     made a walk-through through the kitchen blink green for 30+
+#                     seconds with no scene change coming.
 #
 # It self-terminates if HA disconnects (the disconnect blink takes the LED back) and
 # after 10 minutes regardless, so a missed stop can never leave it blinking forever.
